@@ -1,0 +1,91 @@
+---
+title: 'Get Public Room'
+api: 'GET /room/public/:room_name'
+---
+
+Retrieves a public room by its name, including all documents in the room.
+
+## Authentication
+
+Not required. This endpoint is publicly accessible.
+
+## Path Parameters
+
+<ParamField path="room_name" type="string" required>
+  Name of the public room to retrieve.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Unique identifier of the room.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Name of the room.
+</ResponseField>
+
+<ResponseField name="owner_id" type="string">
+  User ID of the room owner.
+</ResponseField>
+
+<ResponseField name="is_private" type="boolean">
+  Whether the room is private. Always `false` for this endpoint.
+</ResponseField>
+
+<ResponseField name="documents" type="array">
+  Array of document objects in the room.
+  
+  <ResponseField name="id" type="string">
+    Document unique identifier.
+  </ResponseField>
+  
+  <ResponseField name="name" type="string">
+    Document name.
+  </ResponseField>
+  
+  <ResponseField name="room_id" type="string">
+    ID of the room containing this document.
+  </ResponseField>
+</ResponseField>
+
+## Errors
+
+- `400` - No room name specified
+- `404` - Room not found
+- `500` - Internal server error
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.planttogether.com/room/public/my-garden-room
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.planttogether.com/room/public/my-garden-room');
+const room = await response.json();
+```
+
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "my-garden-room",
+  "owner_id": "user-123",
+  "is_private": false,
+  "documents": [
+    {
+      "id": "doc-001",
+      "name": "main-document",
+      "room_id": "550e8400-e29b-41d4-a716-446655440000"
+    }
+  ]
+}
+```
+
+Source: `express/src/index.ts:34-54`

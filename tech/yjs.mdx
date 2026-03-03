@@ -1,0 +1,118 @@
+---
+title: 'Yjs CRDT Framework'
+description: 'Learn how Yjs enables conflict-free collaborative editing in Plant Together'
+---
+
+## What is Yjs?
+
+[Yjs](https://yjs.dev/) is a high-performance CRDT (Conflict-Free Replicated Data Type) implementation that enables real-time collaboration without conflicts. It provides shared data types that can be distributed across multiple clients and merged seamlessly without manual conflict resolution.
+
+<Info>
+CRDT stands for Conflict-Free Replicated Data Type - a data structure designed to be replicated across multiple computers in a network, where replicas can be updated independently and concurrently without coordination, and it is always possible to resolve inconsistencies that might occur.
+</Info>
+
+## Why Yjs?
+
+When building a collaborative editor, there are two main approaches to handling concurrent edits:
+
+1. **Operational Transformation (OT)** - Transforms operations based on concurrent changes
+2. **Conflict-Free Replicated Data Types (CRDT)** - Ensures mathematical convergence without conflicts
+
+Plant Together uses Yjs for several key reasons:
+
+- **Extensive library support** - Works seamlessly with Monaco Editor, WebSockets, and other modern tools
+- **Built-in fallbacks** - Supports cross-tab communication, allowing sessions to persist even if the central WebSocket server goes down
+- **Performance** - Highly optimized for real-time collaboration
+- **Proven reliability** - Used in production by many collaborative applications
+
+<Tip>
+Yjs can synchronize data across browser tabs even without a server connection, making Plant Together resilient to network issues.
+</Tip>
+
+## How Plant Together Uses Yjs
+
+### Shared Document Structure
+
+Plant Together creates a Yjs document for each collaborative room, with a shared text type for the PlantUML content:
+
+```typescript
+// Creating a new Yjs document
+const doc = new Y.Doc()
+
+// Creating a shared text type named 'monaco'
+const type = doc.getText('monaco')
+```
+
+### WebSocket Provider Integration
+
+The WebSocket provider connects the Yjs document to the server for real-time synchronization:
+
+```typescript
+const provider = new WebsocketProvider(serverWsUrl, wsID, doc)
+```
+
+<Note>
+The `wsID` is a combination of the room ID and document ID, ensuring each document has its own synchronization channel.
+</Note>
+
+### Awareness Protocol
+
+Yjs includes an awareness protocol that tracks user presence and state:
+
+```typescript
+// Set local user information
+provider.awareness.setLocalStateField('user', {
+  name: username,
+  color: userColor.current,
+})
+
+// Listen for awareness changes (other users joining/leaving)
+provider.awareness.on('change', () => {
+  const statesArray = Array.from(provider.awareness.getStates())
+  // Update UI to show active collaborators
+})
+```
+
+This enables features like:
+- Seeing who else is editing the document
+- Displaying remote cursor positions
+- Showing user colors and names
+
+### Server-Side Document Persistence
+
+On the server side, Yjs documents are persisted to PostgreSQL and synchronized through Redis:
+
+```typescript
+// Retrieving and merging document updates from database
+const rows = await sql`
+  SELECT update, r 
+  FROM yredis_docs_v1 
+  WHERE room = ${room} AND doc = ${docname}
+`
+
+const doc = Y.mergeUpdatesV2(rows.map((row: any) => row.update))
+```
+
+## Key Benefits
+
+1. **No Merge Conflicts** - Multiple users can edit simultaneously without conflicts
+2. **Offline Support** - Changes sync automatically when connection is restored
+3. **Cross-Tab Sync** - Multiple browser tabs stay in sync automatically
+4. **Efficient Updates** - Only sends delta changes, not entire documents
+
+## Learn More
+
+- [Yjs Documentation](https://docs.yjs.dev/)
+- [CRDT Explained](https://medium.com/@amberovsky/crdt-conflict-free-replicated-data-types-b4bfc8459d26)
+- [Operational Transformation vs CRDT](https://medium.com/coinmonks/operational-transformations-as-an-algorithm-for-automatic-conflict-resolution-3bf8920ea447)
+
+## Related Technologies
+
+<CardGroup cols={2}>
+  <Card title="Monaco Editor" icon="code" href="/tech/monaco-editor">
+    Integration with the VS Code-based editor
+  </Card>
+  <Card title="WebSockets" icon="network-wired" href="/tech/websockets">
+    Real-time communication layer
+  </Card>
+</CardGroup>

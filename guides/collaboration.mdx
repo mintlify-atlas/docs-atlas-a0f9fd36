@@ -1,0 +1,610 @@
+---
+title: Real-time Collaboration
+description: Work together on PlantUML diagrams with real-time editing and offline sync
+---
+
+## Overview
+
+Plant Together enables seamless real-time collaboration using **Yjs** CRDT (Conflict-free Replicated Data Type) technology and **WebSocket** connections. Multiple users can edit diagrams simultaneously with instant synchronization and automatic conflict resolution.
+
+## How Collaboration Works
+
+### Architecture
+
+Plant Together's collaboration system consists of three main components:
+
+<Steps>
+  <Step title="Yjs Document (Y.Doc)">
+    A shared data structure that holds the diagram content. Each document in a room has its own Yjs document.
+    
+    ```typescript
+    // Source: umlEditor.component.tsx:134
+    const doc = new Y.Doc()
+    const type = doc.getText('monaco') // Shared text type
+    ```
+  </Step>
+
+  <Step title="WebSocket Provider">
+    Maintains real-time connection to the server and synchronizes changes between all connected clients.
+    
+    ```typescript
+    // Source: umlEditor.component.tsx:136
+    const provider = new WebsocketProvider(
+      serverWsUrl,       // WebSocket server URL
+      wsID,              // Room + Document ID
+      doc                // Yjs document
+    )
+    ```
+  </Step>
+
+  <Step title="Monaco Binding">
+    Connects the Monaco code editor to the Yjs document, enabling real-time text synchronization.
+    
+    ```typescript
+    // Source: umlEditor.component.tsx:163-169
+    const binding = new MonacoBinding(
+      type,                        // Y.Text type
+      editor.getModel()!,         // Monaco editor model
+      new Set([editor]),          // Set of editors
+      provider.awareness          // Awareness protocol
+    )
+    ```
+  </Step>
+</Steps>
+
+<Info>
+  All changes are transmitted as **binary update messages**, making synchronization extremely efficient even for large diagrams.
+</Info>
+
+## Real-time Editing Features
+
+### Instant Synchronization
+
+Every keystroke is synchronized in real-time:
+
+<Tabs>
+  <Tab title="How It Works">
+    1. **User types** in the editor
+    2. **Monaco binding** detects the change
+    3. **Yjs generates** an update message
+    4. **WebSocket** sends the update to the server
+    5. **Server broadcasts** to all connected clients
+    6. **Other clients apply** the update to their local document
+    7. **Monaco updates** their editor view
+    
+    All of this happens in **milliseconds**.
+  </Tab>
+  
+  <Tab title="Code Implementation">
+    ```typescript
+    // Source: umlEditor.component.tsx:218
+    <Editor
+      theme={'vs-dark'}
+      defaultLanguage={'python'}
+      onMount={handleEditorDidMount}
+      onChange={value => setEditorValue(value || '')}
+    />
+    ```
+    
+    The `onChange` handler updates the local preview while Yjs handles synchronization automatically.
+  </Tab>
+</Tabs>
+
+### Seeing Other Users
+
+#### User Awareness
+
+Plant Together shows you who else is in the room and where they're editing:
+
+**Features:**
+- **Colored cursors** show each user's position
+- **Username labels** appear on hover
+- **Selection highlighting** shows what text others have selected
+- **Unique colors** automatically assigned to each user
+
+<CodeGroup>
+```typescript Awareness Setup
+// Source: umlEditor.component.tsx:139-142
+provider.awareness.setLocalStateField('user', {
+  name: username,      // Display name or generated username
+  color: userColor     // Generated from username hash
+})
+```
+
+```typescript User Identity
+// Source: umlEditor.component.tsx:44-49
+const username =
+  userContext.context?.displayName ||
+  generateQuirkyUsername(
+    userContext.context?.userId || `guest-${Date.now()}`
+  )
+
+const userColor = useRef(generateColorFromString(username))
+```
+
+```typescript Cursor Styling
+// Source: umlEditor.component.tsx:86-116
+const styleSheet = document.createElement('style')
+styleSheet.innerText = `
+  .yRemoteSelectionHead-${clientId}{
+    border-left: 2px solid ${userColor};
+    position: relative;
+  }
+  .yRemoteSelection-${clientId}{
+    background-color: ${userColor} !important;
+    opacity: 0.5 !important;
+  }
+  .yRemoteSelectionHead-${clientId}::before {
+    content: '${username}';
+    color: black;
+    background-color: ${userColor};
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .yRemoteSelectionHead-${clientId}:hover::before {
+    opacity: 0.8;
+  }
+`
+```
+</CodeGroup>
+
+#### Username Generation
+
+<Tabs>
+  <Tab title="Authenticated Users">
+    Users who are logged in see their account display name:
+    
+    ```typescript
+    // Source: umlEditor.component.tsx:45
+    const username = userContext.context?.displayName
+    ```
+    
+    Example: **"Sarah Chen"**, **"alex.dev"**
+  </Tab>
+  
+  <Tab title="Guest Users">
+    Anonymous users get a fun, randomly generated username:
+    
+    ```typescript
+    // Source: userIdentity.utils.ts
+    generateQuirkyUsername(userId)
+    // Returns: "Cosmic Koala", "Mystic Penguin", etc.
+    ```
+    
+    <Tip>
+      Guest usernames are deterministic based on session ID, so you'll keep the same name throughout your session.
+    </Tip>
+  </Tab>
+</Tabs>
+
+#### Color Assignment
+
+ Each user gets a unique color generated from their username:
+
+```typescript
+// Source: userIdentity.utils.ts
+generateColorFromString(username: string)
+// Returns consistent color like: "#3B82F6", "#10B981"
+```
+
+<Note>
+  Colors are **deterministic** - the same username always gets the same color across sessions.
+</Note>
+
+## Document Management
+
+### Multiple Documents Per Room
+
+Each room can contain multiple documents, allowing you to organize related diagrams:
+
+<Steps>
+  <Step title="Create a Document">
+    Click the **+ New Document** button in the sidebar.
+    
+    ```typescript
+    // Source: collabRoom.page.tsx:76-83
+    const createNewDocument = async (roomId: string, documentName: string) => {
+      await plantService.createDocumentInRoom(
+        socket!,
+        documentName,
+        ({ id }) => {
+          setRoomDocuments(docs => [...docs, { id, name: documentName }])
+          setCurrDocument({ id, name: documentName })
+        }
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Switch Between Documents">
+    Click any document name in the sidebar to switch to it. Your WebSocket connection will automatically reconnect to the new document.
+    
+    ```typescript
+    // Source: umlEditor.component.tsx:51-53
+    useEffect(() => {
+      setWsID(`${roomId}${currDocument.id}`) // Update connection ID
+    }, [currDocument, roomId])
+    ```
+  </Step>
+
+  <Step title="Rename Documents">
+    Double-click a document name to edit it inline.
+    
+    ```typescript
+    // Source: collabRoom.page.tsx:92-108
+    const updateDocument = async (documentId: string, newName: string) => {
+      await plantService.updateDocumentInRoom(
+        socket!,
+        documentId,
+        newName,
+        ({ documentName }) => {
+          // Update local state
+          const updatedDoc = roomDocuments.find(doc => doc.id === documentId)
+          updatedDoc!.name = documentName
+        }
+      )
+    }
+    ```
+  </Step>
+
+  <Step title="Delete Documents">
+    Right-click and select delete (or use the delete icon).
+    
+    <Warning>
+      Deleting a document is **permanent** and will affect all users in the room.
+    </Warning>
+  </Step>
+</Steps>
+
+### Document Synchronization Events
+
+All document operations are broadcast to other users:
+
+<CodeGroup>
+```typescript Document Created
+// Source: collabRoom.page.tsx:151-157
+socket?.on('/document', ({ code, documentName, id }) => {
+  if (code != 200) {
+    alert('Unable to update new document')
+  }
+  setRoomDocuments(docs => [...docs, { id, name: documentName }])
+})
+```
+
+```typescript Document Renamed
+// Source: collabRoom.page.tsx:159-175
+socket?.on('/document/rename', ({ code, newDocumentName, documentId }) => {
+  if (code != 200) {
+    alert('Unable to rename document')
+  }
+  
+  setRoomDocuments((docs) => {
+    const updatedRoomDocuments = [...docs]
+    const updatedDoc = updatedRoomDocuments.find(
+      doc => doc.id === documentId
+    )
+    updatedDoc!.name = newDocumentName
+    return updatedRoomDocuments
+  })
+})
+```
+
+```typescript Document Deleted
+// Source: collabRoom.page.tsx:177-202
+socket?.on('/document/delete', ({ code, documentId }) => {
+  if (code != 200) {
+    alert('Unable to delete document')
+  }
+  
+  setRoomDocuments((docs) => {
+    const updatedRoomDocuments = [...docs]
+    const deletedDoc = updatedRoomDocuments.find(
+      doc => doc.id === documentId
+    )
+    const index = updatedRoomDocuments.indexOf(deletedDoc!)
+    const deleted = updatedRoomDocuments.splice(index, 1)
+    
+    // Switch to first doc if current doc was deleted
+    setCurrDocument((doc) => {
+      if (doc === deleted[0]) {
+        return updatedRoomDocuments[0]
+      } else {
+        return doc
+      }
+    })
+    
+    return updatedRoomDocuments
+  })
+})
+```
+</CodeGroup>
+
+## Offline Sync and Conflict Resolution
+
+### How Offline Sync Works
+
+<Info>
+  Plant Together uses **Yjs CRDTs** which automatically handle conflicts and enable offline editing.
+</Info>
+
+<Tabs>
+  <Tab title="Offline Editing">
+    1. **Connection lost** - WebSocket disconnects
+    2. **Continue editing** - Changes are stored locally in the Yjs document
+    3. **Connection restored** - Provider automatically reconnects
+    4. **Sync happens** - Local changes are sent to server
+    5. **Conflicts resolved** - Yjs merges changes intelligently
+    
+    <Note>
+      Your work is **never lost** during temporary disconnections.
+    </Note>
+  </Tab>
+  
+  <Tab title="Conflict Resolution">
+    When two users edit the same line simultaneously:
+    
+    **Traditional systems**: Last write wins ❌
+    
+    **Plant Together (Yjs)**: Intelligent merging ✅
+    
+    ```plaintext
+    User A: "class User {"    →  "class UserService {"
+    User B: "class User {"    →  "class User extends Base {"
+    
+    Result: "class UserService extends Base {"
+    ```
+    
+    <Tip>
+      Yjs preserves the **intent** of both edits whenever possible.
+    </Tip>
+  </Tab>
+  
+  <Tab title="Data Persistence">
+    Plant Together stores document state in two places:
+    
+    1. **Redis Streams** - Real-time updates
+    2. **PostgreSQL** - Persistent snapshots
+    
+    ```typescript
+    // Source: yjs.helpers.ts:10-22
+    const retrieveDoc = async (room: string, docname: string, sql: Sql) => {
+      const rows = await sql`
+        SELECT update, r 
+        FROM yredis_docs_v1 
+        WHERE room = ${room} AND doc = ${docname}
+      `
+      
+      // Merge all updates into final state
+      const doc = Y.mergeUpdatesV2(rows.map((row) => row.update))
+      return { doc, references }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Connection States
+
+<AccordionGroup>
+  <Accordion title="Connected" icon="wifi">
+    **Indicator**: Cursor updates appear instantly
+    
+    **Behavior**:
+    - All changes sync in real-time
+    - Other users visible with cursors
+    - Full collaboration features enabled
+  </Accordion>
+
+  <Accordion title="Connecting" icon="spinner">
+    **Indicator**: Brief moment when switching documents
+    
+    **Behavior**:
+    - Editor remains functional
+    - Changes queued for sync
+    - Usually resolves in less than 500ms
+  </Accordion>
+
+  <Accordion title="Disconnected" icon="wifi-slash">
+    **Indicator**: Other users' cursors disappear
+    
+    **Behavior**:
+    - Editor still works normally
+    - Changes stored locally
+    - Auto-reconnect attempts every few seconds
+    - All changes will sync when reconnected
+    
+    <Warning>
+      If disconnected for extended periods, ensure you don't close the browser tab to preserve your changes.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices for Collaboration
+
+<CardGroup cols={2}>
+  <Card title="Communicate Changes" icon="comments">
+    Use external chat (Slack, Discord) to coordinate major changes:
+    
+    - "Refactoring the class diagram now"
+    - "Adding new sequence diagram to Doc3"
+    - "Can everyone review before I merge?"
+  </Card>
+
+  <Card title="Organize Documents" icon="folder-tree">
+    Create separate documents for different diagram types:
+    
+    - `architecture-overview`
+    - `api-sequence-diagrams`
+    - `database-schema`
+    - `deployment-diagram`
+  </Card>
+
+  <Card title="Avoid Simultaneous Major Edits" icon="triangle-exclamation">
+    While Yjs handles conflicts well, coordinate on large refactors:
+    
+    - Assign different documents to different people
+    - Take turns for major restructuring
+    - Use comments in the diagram code
+  </Card>
+
+  <Card title="Save Regularly" icon="floppy-disk">
+    Although auto-sync is reliable, periodically export important work:
+    
+    - Use the [export feature](/guides/exporting-diagrams)
+    - Keep local backups of critical diagrams
+    - Export before major changes
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Changes Not Appearing for Others">
+    **Possible causes**:
+    - Network connectivity issues
+    - WebSocket server temporarily down
+    - Browser tab in background (throttled)
+    
+    **Solutions**:
+    1. Check your internet connection
+    2. Refresh the page to reconnect
+    3. Ensure browser isn't throttling the tab
+    4. Check browser console for WebSocket errors
+  </Accordion>
+
+  <Accordion title="Can't See Other Users' Cursors">
+    **Possible causes**:
+    - They're viewing a different document
+    - Awareness state not synchronized yet
+    - Browser cache issues
+    
+    **Solutions**:
+    1. Confirm you're on the same document
+    2. Wait a few seconds for awareness to sync
+    3. Refresh the page (you won't lose work)
+  </Accordion>
+
+  <Accordion title="Editor Feels Laggy">
+    **Possible causes**:
+    - Very large diagram (>1000 lines)
+    - Slow network connection
+    - Many simultaneous users (10+)
+    
+    **Solutions**:
+    1. Split large diagrams into multiple documents
+    2. Check network speed and latency
+    3. Close other bandwidth-intensive applications
+    4. Consider breaking up the room for team sub-groups
+  </Accordion>
+
+  <Accordion title="'Document Not Found' Error">
+    **Cause**: Document was deleted by another user
+    
+    **Solution**: You'll automatically switch to the first available document. If all documents were deleted, create a new one.
+  </Accordion>
+</AccordionGroup>
+
+## Technical Details
+
+### WebSocket Connection
+
+<CodeGroup>
+```typescript Client Connection
+// Source: collabRoom.page.tsx:137-144
+const authToken = await plantService.retrieveToken()
+
+const newSocket = io(serverHttpUrl, {
+  extraHeaders: {
+    'room-id': roomId,
+    Authorization: `Bearer ${authToken}`,
+  },
+})
+```
+
+```typescript Server Validation
+// Source: document.service.ts:85-105
+private onConnect = (socket: Socket) => {
+  const roomId: string = socket.handshake.headers?.['room-id']
+
+  if (!roomId) {
+    socket.emit('/connection', {
+      status: 'ERROR',
+      code: 400,
+      message: 'Room ID not provided',
+    })
+    socket.disconnect()
+    throw new Error('Room ID not provided')
+  }
+
+  logger.info(`Socket ${socket.id} joining room ${roomId}`)
+  socket.join(roomId)
+  socket.emit('/connection', { status: 'SUCCESS' })
+  
+  return roomId
+}
+```
+</CodeGroup>
+
+### Yjs Document Lifecycle
+
+```typescript
+// Source: umlEditor.component.tsx:122-178
+const setBinding = useCallback(() => {
+  // Clean up previous connection
+  if (providerRef.current) {
+    providerRef.current.destroy()
+    bindingRef.current?.destroy()
+  }
+
+  // Create new document and provider
+  const doc = new Y.Doc()
+  const provider = new WebsocketProvider(serverWsUrl, wsID, doc)
+  
+  // Set user awareness
+  provider.awareness.setLocalStateField('user', {
+    name: username,
+    color: userColor.current,
+  })
+
+  // Listen for awareness changes (other users joining/leaving)
+  provider.awareness.on('change', () => {
+    const statesArray = Array.from(provider.awareness.getStates())
+    updateClientStyleSheets(statesArray)
+  })
+
+  // Bind to Monaco editor
+  const type = doc.getText('monaco')
+  if (editorRef.current) {
+    const binding = new MonacoBinding(
+      type,
+      editorRef.current.getModel()!,
+      new Set([editorRef.current]),
+      provider.awareness,
+    )
+    bindingRef.current = binding
+  }
+
+  // Cleanup function
+  return () => {
+    provider.awareness.destroy()
+    provider.destroy()
+    bindingRef.current?.destroy()
+  }
+}, [wsID, username])
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Export Your Work" icon="download" href="/guides/exporting-diagrams">
+    Learn how to export diagrams in multiple formats
+  </Card>
+  <Card title="Private Room Access" icon="lock" href="/guides/private-rooms">
+    Control who can access your collaborative rooms
+  </Card>
+  <Card title="API Documentation" icon="code" href="/api/documents/create">
+    Integrate document management into your apps
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/deployment/architecture">
+    Understand the technical architecture
+  </Card>
+</CardGroup>

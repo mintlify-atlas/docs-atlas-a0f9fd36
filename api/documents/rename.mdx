@@ -1,0 +1,82 @@
+---
+title: "Rename Document"
+api: "PUT /room/:room_id/document/:document_id/rename"
+---
+
+Renames an existing document in a room.
+
+## Authentication
+
+No authentication required.
+
+## Path Parameters
+
+<ParamField path="room_id" type="string" required>
+  The unique identifier of the room containing the document.
+</ParamField>
+
+<ParamField path="document_id" type="string" required>
+  The unique identifier of the document to rename.
+</ParamField>
+
+## Body Parameters
+
+<ParamField body="new_document_name" type="string" required>
+  The new name for the document.
+</ParamField>
+
+## Response
+
+<ResponseField name="status" type="number">
+  Returns `200` on successful document rename.
+</ResponseField>
+
+## Error Responses
+
+- `500` - Internal server error occurred while renaming the document.
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X PUT \
+  https://api.planttogether.com/room/abc123/document/doc456/rename \
+  -H "Content-Type: application/json" \
+  -d '{
+    "new_document_name": "updated-document-name"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.planttogether.com/room/abc123/document/doc456/rename',
+  {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      new_document_name: 'updated-document-name',
+    }),
+  }
+);
+```
+
+```python Python
+import requests
+
+response = requests.put(
+    'https://api.planttogether.com/room/abc123/document/doc456/rename',
+    headers={'Content-Type': 'application/json'},
+    json={'new_document_name': 'updated-document-name'}
+)
+```
+
+</CodeGroup>
+
+## Example Response
+
+```json
+200 OK
+```

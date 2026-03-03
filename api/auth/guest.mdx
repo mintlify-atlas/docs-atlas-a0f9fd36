@@ -1,0 +1,67 @@
+---
+title: "Guest Login"
+api: "GET /auth/guest"
+description: "Create a temporary guest session without registration"
+---
+
+## Request
+
+This endpoint does not require any parameters.
+
+## Response
+
+<ResponseField name="token" type="string">
+  Authentication token for the guest session
+</ResponseField>
+
+### Success Response
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### 500 Internal Server Error
+
+Returned when an unexpected error occurs during guest session creation.
+
+```json
+{
+  "error": "An unexpected error occurred. Please try again later."
+}
+```
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET https://api.planttogether.com/auth/guest
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.planttogether.com/auth/guest', {
+  method: 'GET'
+});
+
+const data = await response.json();
+console.log(data.token);
+```
+
+```python Python
+import requests
+
+response = requests.get('https://api.planttogether.com/auth/guest')
+
+data = response.json()
+print(data['token'])
+```
+
+</CodeGroup>

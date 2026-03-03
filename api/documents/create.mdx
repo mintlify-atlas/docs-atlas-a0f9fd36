@@ -1,0 +1,69 @@
+---
+title: "Create Document"
+api: "POST /room/:room_id/document/:document_name"
+---
+
+Creates a new document in a specified room.
+
+## Authentication
+
+No authentication required.
+
+## Path Parameters
+
+<ParamField path="room_id" type="string" required>
+  The unique identifier of the room where the document will be created.
+</ParamField>
+
+<ParamField path="document_name" type="string" required>
+  The name for the new document.
+</ParamField>
+
+## Response
+
+<ResponseField name="status" type="number">
+  Returns `200` on successful document creation.
+</ResponseField>
+
+## Error Responses
+
+- `500` - Internal server error occurred while creating the document.
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST \
+  https://api.planttogether.com/room/abc123/document/my-document \
+  -H "Content-Type: application/json"
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.planttogether.com/room/abc123/document/my-document',
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  }
+);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.planttogether.com/room/abc123/document/my-document',
+    headers={'Content-Type': 'application/json'}
+)
+```
+
+</CodeGroup>
+
+## Example Response
+
+```json
+200 OK
+```

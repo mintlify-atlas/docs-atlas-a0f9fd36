@@ -1,0 +1,317 @@
+---
+title: Creating Rooms
+description: Learn how to create public and private rooms in Plant Together
+---
+
+## Overview
+
+Plant Together allows you to create collaborative workspaces called "rooms" where you and your team can work on PlantUML diagrams together in real-time. Rooms can be either public or private, depending on your collaboration needs.
+
+## Room Types
+
+<CardGroup cols={2}>
+  <Card title="Public Rooms" icon="globe">
+    Anyone with the room name can access and collaborate. Perfect for open-source projects or community collaboration.
+  </Card>
+  <Card title="Private Rooms" icon="lock">
+    Access is controlled by the room owner. Participants need an invitation link with a signature to join.
+  </Card>
+</CardGroup>
+
+## Creating a Room
+
+<Steps>
+  <Step title="Navigate to the Landing Page">
+    From the Plant Together homepage, you'll see the main room creation interface.
+
+  </Step>
+
+  <Step title="Enter a Room Name">
+    Type your desired room name in the input field. Room names must follow these rules:
+    
+    <Warning>
+      Room names **cannot contain**:
+      - Spaces (use hyphens or underscores instead)
+      - Forward slashes (`/`)
+      - Empty values
+    </Warning>
+    
+    <Tip>
+      Use descriptive names like `project-architecture` or `sprint-planning-diagrams` to easily identify your rooms.
+    </Tip>
+  </Step>
+
+  <Step title="Choose Room Privacy">
+    Toggle the **Private** switch to set your room visibility:
+    
+    <Tabs>
+      <Tab title="Public Room (Default)">
+        Leave the toggle **off** for a public room.
+        
+        **Public Room Characteristics:**
+        - Accessible to anyone who knows the room name
+        - URL format: `https://planttogether.com/#/{roomName}`
+        - Cannot have duplicate public room names
+        - Best for: Open collaboration, demos, public documentation
+        
+        ```javascript
+        // Example: Creating a public room via API
+        await createRoomWithDocument('project-arch', false, 'Document1')
+        // URL: https://planttogether.com/#/project-arch
+        ```
+      </Tab>
+      
+      <Tab title="Private Room">
+        Toggle the switch **on** to create a private room.
+        
+        **Private Room Characteristics:**
+        - Access controlled by room owner
+        - URL format: `https://planttogether.com/#/private/{ownerId}/{roomName}`
+        - Only owner and invited participants can access
+        - Requires signature-based invitation links
+        - Best for: Team projects, sensitive diagrams, client work
+        
+        ```javascript
+        // Example: Creating a private room via API
+        await createRoomWithDocument('client-designs', true, 'Document1')
+        // URL: https://planttogether.com/#/private/user123/client-designs
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Submit to Create or Join">
+    Click the **Submit** button or press **Enter** to proceed.
+    
+    <Info>
+      Plant Together will automatically:
+      - Check if a room with that name already exists
+      - Join the existing room if found
+      - Create a new room if it doesn't exist
+    </Info>
+  </Step>
+</Steps>
+
+## Room Creation Behavior
+
+### First-time Creation
+
+When you create a new room, Plant Together automatically:
+
+1. **Creates the room** with your specified privacy setting
+2. **Generates a default document** named "Document1"
+3. **Redirects you** to the collaboration interface
+4. **Establishes WebSocket connection** for real-time collaboration
+
+### Joining Existing Rooms
+
+If a room already exists:
+
+- **Public rooms**: You'll join immediately if you provide the correct name
+- **Private rooms**: You can only join if:
+  - You are the owner, OR
+  - You have been granted access via a signature link
+
+<CodeGroup>
+```typescript Landing Page Logic
+// Source: landing.page.tsx:20-71
+const handleGoToRoom = async () => {
+  // Validation
+  if (!roomName.trim() || roomName.includes(' ') || roomName.includes('/')) {
+    setError(true)
+    return
+  }
+
+  try {
+    const roomToGoTo = isPrivate
+      ? `private/${userContext?.context?.userId}/${roomName}`
+      : roomName
+    
+    // Check if room exists
+    const room = isPrivate
+      ? await plantService.getPrivateRoom(
+          userContext?.context?.userId!,
+          roomName,
+        )
+      : await plantService.getPublicRoom(roomName)
+    
+    if (room?.documents) {
+      // Room exists - join it
+      navigate(`/${roomToGoTo}`)
+      return
+    }
+
+    // Create new room
+    await plantService.createRoomWithDocument(
+      roomName,
+      isPrivate,
+      'Document1',
+    )
+    navigate(`/${roomToGoTo}`)
+  } catch (error: any) {
+    setError(true)
+    setErrorMessage(error.message)
+  }
+}
+```
+
+```typescript API Call
+// Source: plant.service.tsx:7-37
+export const createRoomWithDocument = async (
+  roomName: string,
+  isPrivate: boolean,
+  documentName: string,
+) => {
+  const response = await fetch(`${serverHttpUrl}/room/${roomName}`, {
+    body: JSON.stringify({
+      document_name: documentName,
+      is_private: isPrivate,
+    }),
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${await retrieveToken()}`,
+    },
+  })
+  
+  if (!response.ok) {
+    switch (response.status) {
+      case 400:
+      case 403:
+        const errorBody = await response.json()
+        throw new Error(errorBody.error)
+      case 500:
+        throw new Error(
+          "You already have a room with this name, maybe it's private?",
+        )
+      default:
+        throw new Error(`Response status: ${response.status}`)
+    }
+  }
+}
+```
+</CodeGroup>
+
+## Room Naming Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Names">
+    Choose names that clearly indicate the room's purpose:
+    
+    ✅ Good examples:
+    - `microservices-architecture`
+    - `api-design-2024`
+    - `database-schema-v2`
+    
+    ❌ Avoid:
+    - `room1`
+    - `test`
+    - `asdf`
+  </Accordion>
+
+  <Accordion title="Follow Naming Conventions">
+    Establish consistent patterns for your organization:
+    
+    - **Project-based**: `{project}-{purpose}` → `apollo-api-diagrams`
+    - **Team-based**: `{team}-{topic}` → `backend-architecture`
+    - **Date-based**: `{topic}-{date}` → `sprint-planning-2024-03`
+  </Accordion>
+
+  <Accordion title="Consider URL-Friendliness">
+    Since room names appear in URLs, keep them:
+    
+    - Lowercase (for consistency)
+    - Short but descriptive
+    - Using hyphens for word separation
+    - Free of special characters
+  </Accordion>
+</AccordionGroup>
+
+## User Permissions
+
+### Guest Users
+
+<Note>
+  Guest users (not logged in) can:
+  - Create and join public rooms
+  - Create and join their own private rooms (session-based)
+  - Cannot toggle room privacy
+  - Assigned a quirky auto-generated username
+</Note>
+
+### Authenticated Users
+
+Authenticated users get additional capabilities:
+
+- Create persistent private rooms
+- Toggle room privacy (owner only)
+- Share private rooms with signature-based links
+- Access room from multiple devices
+- Custom display name in collaboration
+
+## Switching Between Public and Private
+
+<Warning>
+  Only the room **owner** can change room privacy settings.
+</Warning>
+
+Room owners can toggle privacy from the navigation bar:
+
+1. Look for the lock icon in the top-right corner
+2. Click the **Private Room** or **Public Room** button
+3. The room URL will update automatically
+4. All participants will be redirected
+
+See [Private Rooms](/guides/private-rooms) for detailed information on privacy controls.
+
+## Common Errors and Solutions
+
+<AccordionGroup>
+  <Accordion title="'Room name cannot be empty' Error">
+    **Cause**: You submitted without entering a room name.
+    
+    **Solution**: Enter a valid room name before submitting.
+  </Accordion>
+
+  <Accordion title="'No spaces allowed' Error">
+    **Cause**: Your room name contains spaces.
+    
+    **Solution**: Replace spaces with hyphens (`-`) or underscores (`_`).
+    
+    Example: `my project` → `my-project`
+  </Accordion>
+
+  <Accordion title="'No slash allowed' Error">
+    **Cause**: Your room name contains forward slashes.
+    
+    **Solution**: Remove or replace slashes with hyphens.
+    
+    Example: `project/v2` → `project-v2`
+  </Accordion>
+
+  <Accordion title="'You already have a room with this name' Error">
+    **Cause**: A private room with this name already exists under your account.
+    
+    **Solution**: 
+    - Use a different room name, OR
+    - Access your existing room from your room list, OR
+    - Toggle to public if you want to access the public room instead
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Start Collaborating" icon="users" href="/guides/collaboration">
+    Learn how to work with others in real-time
+  </Card>
+  <Card title="Private Room Access" icon="key" href="/guides/private-rooms">
+    Understand private room security and sharing
+  </Card>
+  <Card title="Export Your Work" icon="download" href="/guides/exporting-diagrams">
+    Export diagrams as SVG, PNG, or code
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/rooms/create">
+    Integrate room creation into your workflow
+  </Card>
+</CardGroup>

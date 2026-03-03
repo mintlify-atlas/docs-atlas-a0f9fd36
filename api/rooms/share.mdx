@@ -1,0 +1,73 @@
+---
+title: 'Share Private Room'
+api: 'PUT /room/share/:room_id'
+---
+
+Generates a signature token that can be used to share access to a private room. Users with this signature can access the room by including it in the query parameters when retrieving the private room.
+
+## Authentication
+
+Required. Include the authentication token in the `Authorization` header. User must have access to the private room.
+
+## Path Parameters
+
+<ParamField path="room_id" type="string" required>
+  Unique identifier of the room to share.
+</ParamField>
+
+## Response
+
+<ResponseField name="signature" type="string">
+  A signature token that grants temporary access to the private room. Share this token with other users to grant them access.
+</ResponseField>
+
+## Errors
+
+- `401` - Unauthorized (no token provided)
+- `403` - Forbidden (user does not have access to this private room)
+- `500` - Internal server error
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X PUT https://api.planttogether.com/room/share/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: YOUR_AUTH_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.planttogether.com/room/share/550e8400-e29b-41d4-a716-446655440000',
+  {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'YOUR_AUTH_TOKEN'
+    }
+  }
+);
+const { signature } = await response.json();
+```
+
+</CodeGroup>
+
+## Example Response
+
+```json
+{
+  "signature": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+## Usage
+
+Once you have a signature, share it with other users. They can use it to access the private room by including it as a query parameter:
+
+```bash
+curl "https://api.planttogether.com/room/private/user-123/room-name?signature=SIGNATURE_TOKEN" \
+  -H "Authorization: THEIR_AUTH_TOKEN"
+```
+
+The signature will be processed and grant them access to the room. See the [Get Private Room](/api/rooms/get-private) endpoint for more details.
+
+Source: `express/src/index.ts:154-169`

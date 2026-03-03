@@ -1,0 +1,356 @@
+---
+title: 'WebSocket Server & Real-Time Sync'
+description: 'How Plant Together uses Y-Redis and WebSockets for persistent, real-time collaboration'
+---
+
+## Real-Time Synchronization Architecture
+
+Plant Together uses a WebSocket-based architecture to enable real-time collaboration. The system consists of multiple layers working together:
+
+1. **WebSocket Server** - Handles real-time connections
+2. **Y-Redis** - Yjs-compatible WebSocket server with Redis persistence
+3. **Redis** - In-memory message broker for real-time updates
+4. **PostgreSQL** - Persistent storage for document history
+
+<Info>
+WebSockets provide a full-duplex communication channel over a single TCP connection, enabling real-time bidirectional data transfer between clients and servers.
+</Info>
+
+## Why Y-Redis?
+
+Initially, Plant Together used the basic `y-websocket` server (started with `npx y-websocket`), but this had a critical limitation: rooms were persisted only in memory, making it difficult to control data retention after users disconnected.
+
+The solution was [Y-Redis](https://github.com/yjs/y-redis), created by [Kevin Jahns](https://github.com/dmonad) (the creator of Yjs). Y-Redis extends y-websocket with:
+
+- **Persistent storage** - Documents are stored in PostgreSQL
+- **Redis streaming** - Real-time updates via Redis Streams
+- **Automatic cleanup** - Configurable retention policies
+- **Scalability** - Multiple server instances can share state via Redis
+
+<Tip>
+Y-Redis allows Plant Together to persist collaborative sessions even after all users have disconnected, enabling "pick up where you left off" functionality.
+</Tip>
+
+## Getting to Production: The WSS Journey
+
+Deploying a production WebSocket server required several steps:
+
+### Challenge: HTTPS Requires WSS
+
+Browsers enforce a security requirement: HTTPS websites can only connect to secure WebSocket servers (WSS). Plant Together needed to upgrade from `ws://` to `wss://`.
+
+### Step 1: Obtaining a TLS Certificate
+
+Using [certbot](https://certbot.eff.org/) with [Let's Encrypt](https://letsencrypt.org/):
+
+```bash
+sudo certbot certonly --standalone -d plant-together-yredis.example.com
+```
+
+This provides free, browser-trusted TLS certificates that auto-renew every 90 days.
+
+### Step 2: Configuring Y-Redis with TLS
+
+Instead of using NGINX as a TLS terminator (which is complex to configure), Plant Together uses a [fork of y-websocket by Andreas Rozek](https://github.com/rozek/y-websocket) that natively supports TLS certificates.
+
+<Note>
+This fork eliminates the need for NGINX, simplifying deployment and reducing potential points of failure.
+</Note>
+
+## Server-Side Implementation
+
+### Redis Client Setup
+
+The Express server connects to Redis for pub/sub messaging:
+
+```typescript
+import { createClient } from 'redis'
+import { logger } from '../logger.js'
+import { REDIS_HOST } from '../config.js'
+
+const redisClient = createClient({
+  url: REDIS_HOST,
+})
+
+redisClient.on('error', err => logger.error('Redis Client Error', err))
+
+await redisClient.connect()
+
+export default redisClient
+```
+
+### Document Retrieval from PostgreSQL
+
+When a user joins a room, Y-Redis retrieves the document history from PostgreSQL:
+
+```typescript
+const retrieveDoc = async (room: string, docname: string, sql: Sql) => {
+  const rows = await sql`
+    SELECT update, r 
+    FROM yredis_docs_v1 
+    WHERE room = ${room} AND doc = ${docname}
+  `
+  
+  if (rows.length === 0) {
+    return null
+  }
+  
+  // Merge all updates into a single document state
+  const doc = Y.mergeUpdatesV2(rows.map((row: any) => row.update))
+  const references = rows.map((row: any) => row.r)
+  
+  return { doc, references }
+}
+```
+
+<Tip>
+Yjs stores documents as a series of updates. When loading from the database, all updates are merged to reconstruct the current state.
+</Tip>
+
+### Redis Stream Processing
+
+Recent changes are read from Redis Streams for fast access:
+
+```typescript
+const getDoc = async (room: string, redis: RedisClientType, sql: Sql) => {
+  const docid = 'index'
+  
+  // Read messages from Redis Stream
+  const ms = extractMessagesFromStreamReply(
+    await redis.xRead(redis.commandOptions({ returnBuffers: true }), {
+      key: computeRedisRoomStreamName(room, docid, 'y'),
+      id: '0',
+    }),
+    'y',
+  )
+
+  const docMessages = ms.get(room)?.get(docid) || null
+  const docstate = await retrieveDoc(room, docid, sql)
+  
+  const ydoc = new Y.Doc()
+  const awareness = new awarenessProtocol.Awareness(ydoc)
+  
+  // Apply persisted state from PostgreSQL
+  if (docstate) {
+    Y.applyUpdateV2(ydoc, docstate.doc)
+  }
+
+  // Apply recent updates from Redis Stream
+  ydoc.transact(() => {
+    docMessages?.messages.forEach((m: any) => {
+      const decoder = decoding.createDecoder(m)
+      switch (decoding.readVarUint(decoder)) {
+        case 0: {
+          // Sync message
+          if (decoding.readVarUint(decoder) === 2) {
+            Y.applyUpdate(ydoc, decoding.readVarUint8Array(decoder))
+          }
+          break
+        }
+        case 1: {
+          // Awareness message (user presence)
+          awarenessProtocol.applyAwarenessUpdate(
+            awareness,
+            decoding.readVarUint8Array(decoder),
+            null,
+          )
+          break
+        }
+      }
+    })
+  })
+
+  return ydoc
+}
+```
+
+### Room Stream Naming
+
+Redis streams are organized by room and document:
+
+```typescript
+const computeRedisRoomStreamName = (
+  room: string,
+  docid: string,
+  prefix: string,
+) => `${prefix}:room:${encodeURIComponent(room)}:${encodeURIComponent(docid)}`
+
+// Example: "y:room:my-room:index"
+```
+
+## Client-Side Connection
+
+### WebSocket Provider Setup
+
+The React application connects to the Y-Redis server:
+
+```typescript
+import * as Y from 'yjs'
+import { WebsocketProvider } from 'y-websocket'
+
+const serverWsUrl = import.meta.env.VITE_SERVER_WS_URL || 'ws://localhost:3003'
+
+// Create Yjs document
+const doc = new Y.Doc()
+
+// Connect to WebSocket server
+const provider = new WebsocketProvider(
+  serverWsUrl,     // WebSocket server URL
+  wsID,            // Room identifier
+  doc              // Yjs document to sync
+)
+```
+
+### User Awareness
+
+The awareness protocol broadcasts user information:
+
+```typescript
+provider.awareness.setLocalStateField('user', {
+  name: username,
+  color: userColor.current,
+})
+
+// Listen for other users joining/leaving
+provider.awareness.on('change', () => {
+  const statesArray = Array.from(provider.awareness.getStates())
+  // Update UI to show active collaborators
+})
+```
+
+### Socket.io for Metadata
+
+While Yjs handles document content sync, Socket.io handles document metadata operations:
+
+```typescript
+import { io, Socket } from 'socket.io-client'
+
+const authToken = await retrieveToken()
+
+const socket = io(serverHttpUrl, {
+  extraHeaders: {
+    'room-id': roomId,
+    Authorization: `Bearer ${authToken}`,
+  },
+})
+
+// Listen for document creation
+socket.on('/document', ({ code, documentName, id }: any) => {
+  if (code === 200) {
+    setRoomDocuments(docs => [...docs, { id, name: documentName }])
+  }
+})
+
+// Listen for document renames
+socket.on('/document/rename', ({ code, newDocumentName, documentId }: any) => {
+  if (code === 200) {
+    // Update document name in UI
+  }
+})
+
+// Listen for document deletions
+socket.on('/document/delete', ({ code, documentId }: any) => {
+  if (code === 200) {
+    // Remove document from UI
+  }
+})
+```
+
+<Note>
+Plant Together uses two WebSocket connections: Y-Redis for document content synchronization and Socket.io for metadata operations like creating, renaming, and deleting documents.
+</Note>
+
+## Architecture Diagram
+
+```
+┌─────────────┐
+│   Browser   │
+│   (Client)  │
+└──────┬──────┘
+       │
+       ├─────── WebSocket (Yjs) ────────► Y-Redis Server
+       │                                        │
+       │                                        ├──► Redis Streams
+       │                                        │    (Real-time cache)
+       │                                        │
+       │                                        └──► PostgreSQL
+       │                                             (Persistent storage)
+       │
+       └─────── Socket.io ─────────────► Express Server
+                                                │
+                                                └──► PostgreSQL
+                                                     (Metadata: rooms, users)
+```
+
+## Environment Configuration
+
+Key environment variables for WebSocket setup:
+
+```env
+# Client connects to this WebSocket server
+VITE_SERVER_WS_URL=wss://plant-together-yredis.example.com
+
+# Y-Redis server port
+YREDIS_PORT=3003
+
+# Redis connection
+REDIS_PORT=6379
+REDIS=redis://redis:6379
+
+# PostgreSQL connection for document persistence
+DB_NAME=postgres
+DB_HOST=database-psql
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=secretpassword
+
+# Or use a full connection string
+POSTGRES=postgres://postgres:secretpassword@database-psql/postgres
+```
+
+## Sync and Offline Support
+
+One of Yjs's most powerful features is offline support:
+
+1. **Online** - Changes sync immediately through WebSockets
+2. **Goes offline** - Client buffers changes locally
+3. **Comes back online** - Buffered changes sync automatically
+4. **Conflict resolution** - CRDT ensures no merge conflicts
+
+<Tip>
+You can disconnect from the internet, make changes, reconnect, and all your edits will sync seamlessly with other users' changes.
+</Tip>
+
+## Cross-Tab Communication
+
+Yjs also supports cross-tab synchronization using BroadcastChannel:
+
+- Open the same room in multiple tabs
+- Changes in one tab appear instantly in others
+- Works even if the WebSocket server is down
+- Uses local browser APIs, no network required
+
+## Performance Considerations
+
+- **Redis Streams** - Provide fast access to recent changes
+- **PostgreSQL** - Stores full document history for recovery
+- **Delta Updates** - Only changed portions are transmitted
+- **Compression** - Yjs uses efficient binary encoding
+
+## Learn More
+
+- [Y-Redis on GitHub](https://github.com/yjs/y-redis)
+- [Y-WebSocket Documentation](https://github.com/yjs/y-websocket)
+- [Redis Streams Documentation](https://redis.io/docs/data-types/streams/)
+- [WebSocket Protocol (RFC 6455)](https://tools.ietf.org/html/rfc6455)
+
+## Related Technologies
+
+<CardGroup cols={2}>
+  <Card title="Yjs" icon="share-nodes" href="/tech/yjs">
+    CRDT framework for conflict-free sync
+  </Card>
+  <Card title="Monaco Editor" icon="code" href="/tech/monaco-editor">
+    The collaborative editor interface
+  </Card>
+</CardGroup>

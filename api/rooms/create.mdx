@@ -1,0 +1,78 @@
+---
+title: 'Create Room'
+api: 'POST /room/:room_name'
+---
+
+Creates a new room with an initial document. Rooms can be either public or private. Guest users cannot create private rooms.
+
+## Authentication
+
+Required. Include the authentication token in the `Authorization` header.
+
+## Path Parameters
+
+<ParamField path="room_name" type="string" required>
+  Name of the room to create. Public room names must be unique across all public rooms.
+</ParamField>
+
+## Request Body
+
+<ParamField body="document_name" type="string" required>
+  Name of the initial document to create in the room.
+</ParamField>
+
+<ParamField body="is_private" type="boolean" default={false}>
+  Whether the room should be private. If `true`, only users with explicit access can join. Guest users cannot create private rooms.
+</ParamField>
+
+## Response
+
+<ResponseField name="status" type="number">
+  Returns `200` on successful room creation.
+</ResponseField>
+
+## Errors
+
+- `400` - Invalid token provided
+- `400` - Public room name already exists
+- `403` - Guest users cannot create private rooms
+- `500` - Internal server error
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.planttogether.com/room/my-garden-room \
+  -H "Authorization: YOUR_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "document_name": "main-document",
+    "is_private": false
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.planttogether.com/room/my-garden-room', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'YOUR_AUTH_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    document_name: 'main-document',
+    is_private: false
+  })
+});
+```
+
+</CodeGroup>
+
+## Implementation Details
+
+- A unique UUID is generated for the room ID
+- The room creator is automatically added as a participant with access
+- Public room names must be unique across the platform
+- Private room names only need to be unique per owner
+
+Source: `express/src/index.ts:100-133`

@@ -1,0 +1,378 @@
+---
+title: 'Environment Variables'
+description: 'Complete reference for all environment variables used in Plant Together'
+---
+
+## Overview
+
+Plant Together uses environment variables to configure all services. Create a `.env` file in the root directory of your project to customize the deployment.
+
+<Warning>
+  Never commit your `.env` file to version control. Ensure `.env` is listed in your `.gitignore` file to prevent exposing sensitive credentials.
+</Warning>
+
+## Required Variables
+
+These variables **must** be set for the application to function:
+
+<ParamField path="FIREBASE_API_KEY" type="string" required>
+  Firebase API key for authentication.
+  
+  Obtain this from your Firebase project settings at [console.firebase.google.com](https://console.firebase.google.com).
+</ParamField>
+
+<ParamField path="FIREBASE_AUTH_DOMAIN" type="string" required>
+  Firebase authentication domain.
+  
+  Format: `your-project-id.firebaseapp.com`
+</ParamField>
+
+<ParamField path="FIREBASE_PROJECT_ID" type="string" required>
+  Your Firebase project ID.
+  
+  Find this in your Firebase project settings.
+</ParamField>
+
+<ParamField path="SERVICE_ACCOUNT_CREDENTIAL" type="string" required>
+  Firebase service account credentials JSON.
+  
+  Download from Firebase Console → Project Settings → Service Accounts → Generate New Private Key.
+  
+  <Warning>
+    This contains sensitive credentials. Never commit this to version control.
+  </Warning>
+</ParamField>
+
+## React Frontend Variables
+
+Configuration for the React application frontend:
+
+<ParamField path="VITE_PORT" type="number" default="4173">
+  Port for the production React application.
+  
+  Development mode runs on port 5173 by default.
+</ParamField>
+
+<ParamField path="VITE_SERVER_HTTP_URL" type="string" default="http://localhost:3000">
+  HTTP URL for the Express API server.
+  
+  <CodeGroup>
+    ```env Development
+    VITE_SERVER_HTTP_URL=http://localhost:3000
+    ```
+
+    ```env Production (Docker)
+    VITE_SERVER_HTTP_URL=http://plant-together-express
+    ```
+
+    ```env Production (External)
+    VITE_SERVER_HTTP_URL=https://api.plant-together.com
+    ```
+  </CodeGroup>
+</ParamField>
+
+<ParamField path="VITE_SERVER_WS_URL" type="string" default="ws://localhost:3003">
+  WebSocket URL for the Y-Redis real-time collaboration server.
+  
+  <CodeGroup>
+    ```env Development
+    VITE_SERVER_WS_URL=ws://localhost:3003
+    ```
+
+    ```env Production (Docker)
+    VITE_SERVER_WS_URL=ws://plant-together-yredis
+    ```
+
+    ```env Production (External)
+    VITE_SERVER_WS_URL=wss://ws.plant-together.com
+    ```
+  </CodeGroup>
+</ParamField>
+
+### Analytics Variables (Production Only)
+
+<ParamField path="VITE_POSTHOG_KEY" type="string" default="''">
+  PostHog analytics project key.
+  
+  Optional. Leave empty to disable PostHog analytics.
+</ParamField>
+
+<ParamField path="VITE_POSTHOG_HOST" type="string" default="''">
+  PostHog analytics host URL.
+  
+  Optional. Leave empty to disable PostHog analytics.
+</ParamField>
+
+<ParamField path="VITE_CLARITY_PROJECT_ID" type="string" default="''">
+  Microsoft Clarity project ID for session recording.
+  
+  Optional. Leave empty to disable Clarity integration.
+</ParamField>
+
+## Express Backend Variables
+
+Configuration for the Express API server:
+
+<ParamField path="PORT" type="number" default="3000">
+  Port for the Express HTTP server.
+</ParamField>
+
+<ParamField path="ROOM_SIGNATURE_SECRET" type="string" default="0)8+a~([:<OE8RLj5Zp}">
+  Secret key for signing room access tokens.
+  
+  <Warning>
+    Change this default value in production! Use a strong, randomly generated secret.
+  </Warning>
+  
+  Generate a secure secret:
+  ```bash
+  openssl rand -base64 32
+  ```
+</ParamField>
+
+<ParamField path="REDIS_HOST" type="string" default="redis://redis-together-dev">
+  Redis connection URL for session storage.
+  
+  Format: `redis://[host]:[port]` or `rediss://[host]:[port]` for TLS.
+</ParamField>
+
+## Y-Redis WebSocket Server Variables
+
+Configuration for the Y-Redis real-time collaboration server:
+
+<ParamField path="YREDIS_PORT" type="number" default="3003">
+  Port for the Y-Redis WebSocket server.
+</ParamField>
+
+<ParamField path="LOG" type="string" default="^(?!No tasks available).*$">
+  Log filter regex pattern for Y-Redis.
+  
+  <CodeGroup>
+    ```env Filter "No tasks available"
+    LOG="^(?!No tasks available).*$"
+    ```
+
+    ```env Show All Logs
+    LOG="*"
+    ```
+
+    ```env Show Only Errors
+    LOG="^(ERROR|WARN).*$"
+    ```
+  </CodeGroup>
+</ParamField>
+
+<ParamField path="REDIS" type="string" default="redis://redis-together-dev">
+  Redis connection URL for Y-Redis pub/sub.
+  
+  Used for distributing updates across multiple Y-Redis instances.
+</ParamField>
+
+<ParamField path="POSTGRES" type="string" default="postgres://postgres:1234@database-psql-dev/postgres">
+  PostgreSQL connection string for Y-Redis document persistence.
+  
+  Format: `postgres://[user]:[password]@[host]:[port]/[database]`
+  
+  If not specified, Y-Redis will construct this from individual DB_* variables.
+</ParamField>
+
+## PostgreSQL Database Variables
+
+Configuration for the PostgreSQL database:
+
+<ParamField path="DB_NAME" type="string" default="postgres">
+  PostgreSQL database name.
+</ParamField>
+
+<ParamField path="DB_HOST" type="string" default="database-psql-dev">
+  PostgreSQL host address.
+  
+  Use the Docker service name when running in containers.
+</ParamField>
+
+<ParamField path="DB_PORT" type="number" default="5432">
+  PostgreSQL port number.
+</ParamField>
+
+<ParamField path="DB_USER" type="string" default="postgres">
+  PostgreSQL username.
+  
+  <Warning>
+    Change the default username in production environments.
+  </Warning>
+</ParamField>
+
+<ParamField path="DB_PASS" type="string" default="1234">
+  PostgreSQL password.
+  
+  <Warning>
+    **Critical**: Change this default password immediately for any production deployment!
+  </Warning>
+</ParamField>
+
+<ParamField path="PSQL_PORT" type="number" default="5432">
+  External port mapping for PostgreSQL.
+  
+  This is the port exposed on your host machine to access PostgreSQL.
+</ParamField>
+
+## Redis Cache Variables
+
+Configuration for the Redis cache:
+
+<ParamField path="REDIS_PORT" type="number" default="6379">
+  External port mapping for Redis.
+  
+  This is the port exposed on your host machine to access Redis.
+</ParamField>
+
+## PgAdmin Variables
+
+Configuration for the PgAdmin web interface:
+
+<ParamField path="ADMIN_EMAIL" type="string" default="developer@plant-together.com">
+  Email address for PgAdmin login.
+  
+  Use this email to log into the PgAdmin web interface.
+</ParamField>
+
+<ParamField path="ADMIN_PASS" type="string" default="1234">
+  Password for PgAdmin login.
+  
+  <Warning>
+    Change this default password for production deployments.
+  </Warning>
+</ParamField>
+
+<ParamField path="PGADMIN_PORT" type="number" default="1007">
+  External port for the PgAdmin web interface.
+  
+  Access PgAdmin at `http://localhost:[PGADMIN_PORT]`
+</ParamField>
+
+## Example Configuration Files
+
+### Development Environment
+
+```env .env (Development)
+# React Configuration
+VITE_SERVER_HTTP_URL=http://localhost:3000
+VITE_SERVER_WS_URL=ws://localhost:3003
+
+# Express Configuration
+PORT=3000
+ROOM_SIGNATURE_SECRET=your-secure-secret-here
+
+# Firebase Configuration (Required)
+FIREBASE_API_KEY=your-firebase-api-key
+FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+FIREBASE_PROJECT_ID=your-project-id
+SERVICE_ACCOUNT_CREDENTIAL='{"type":"service_account",...}'
+
+# Database Configuration
+DB_NAME=postgres
+DB_HOST=database-psql-dev
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=your-secure-password
+PSQL_PORT=5432
+
+# Y-Redis Configuration
+YREDIS_PORT=3003
+LOG="^(?!No tasks available).*$"
+
+# Redis Configuration
+REDIS_HOST=redis://redis-together-dev
+REDIS_PORT=6379
+
+# PgAdmin Configuration
+ADMIN_EMAIL=developer@plant-together.com
+ADMIN_PASS=your-admin-password
+PGADMIN_PORT=1007
+```
+
+### Production Environment
+
+```env .env (Production)
+# React Configuration
+VITE_PORT=4173
+VITE_SERVER_HTTP_URL=http://plant-together-express
+VITE_SERVER_WS_URL=ws://plant-together-yredis
+
+# Analytics (Optional)
+VITE_POSTHOG_KEY=phc_your_posthog_key
+VITE_POSTHOG_HOST=https://app.posthog.com
+VITE_CLARITY_PROJECT_ID=your_clarity_id
+
+# Express Configuration
+PORT=3000
+ROOM_SIGNATURE_SECRET=super-secure-random-secret-string-here
+
+# Firebase Configuration (Required)
+FIREBASE_API_KEY=your-production-firebase-api-key
+FIREBASE_AUTH_DOMAIN=your-prod-project.firebaseapp.com
+FIREBASE_PROJECT_ID=your-prod-project-id
+SERVICE_ACCOUNT_CREDENTIAL='{"type":"service_account",...}'
+
+# Database Configuration
+DB_NAME=plant_together_prod
+DB_HOST=database-psql
+DB_PORT=5432
+DB_USER=plant_together_user
+DB_PASS=very-secure-production-password
+PSQL_PORT=5432
+
+# Y-Redis Configuration
+YREDIS_PORT=3003
+LOG="^(?!No tasks available).*$"
+POSTGRES=postgres://plant_together_user:very-secure-production-password@database-psql:5432/plant_together_prod
+
+# Redis Configuration
+REDIS_HOST=redis://redis-together
+REDIS=redis://redis-together
+REDIS_PORT=6379
+
+# PgAdmin Configuration
+ADMIN_EMAIL=admin@yourcompany.com
+ADMIN_PASS=strong-admin-password
+PGADMIN_PORT=1007
+```
+
+## Security Best Practices
+
+<Warning>
+  Follow these security practices for production deployments:
+</Warning>
+
+1. **Change all default passwords**: Never use default values for `DB_PASS`, `ADMIN_PASS`, or `ROOM_SIGNATURE_SECRET`
+2. **Use strong secrets**: Generate cryptographically secure random strings for all secrets
+3. **Protect credentials**: Never commit `.env` files or Firebase service account credentials to version control
+4. **Use TLS/SSL**: In production, use `wss://` for WebSocket connections and `https://` for HTTP endpoints
+5. **Limit access**: Configure firewalls to restrict database and Redis access to only necessary services
+6. **Rotate credentials**: Regularly rotate passwords and API keys
+7. **Environment separation**: Use different credentials for development, staging, and production environments
+
+## Troubleshooting
+
+### Variables Not Being Applied
+
+Ensure your `.env` file is in the correct location (root directory of the project) and restart all services:
+
+```bash
+docker compose down
+docker compose up --build
+```
+
+### Firebase Authentication Errors
+
+Verify your Firebase credentials are correctly formatted:
+- API keys should not have quotes
+- Service account JSON should be on a single line or properly escaped
+- Domain should match your Firebase project exactly
+
+### Database Connection Failures
+
+Check that:
+- `DB_HOST` matches your PostgreSQL container name or hostname
+- `DB_USER` and `DB_PASS` match the credentials configured in PostgreSQL
+- PostgreSQL container is running: `docker compose ps database-psql-dev`

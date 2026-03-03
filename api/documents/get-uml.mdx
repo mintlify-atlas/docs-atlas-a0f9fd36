@@ -1,0 +1,102 @@
+---
+title: "Get Room UML"
+api: "GET /room/:room_id/uml"
+---
+
+Retrieves the UML (Unified Modeling Language) diagram data for all documents in a room.
+
+## Authentication
+
+Required for private rooms. Use the `Authorization` header with a bearer token.
+
+## Path Parameters
+
+<ParamField path="room_id" type="string" required>
+  The unique identifier of the room.
+</ParamField>
+
+## Body Parameters
+
+<ParamField body="is_private" type="boolean" default={false}>
+  Indicates whether the room is private. Private rooms require authentication.
+</ParamField>
+
+## Headers
+
+<ParamField header="Authorization" type="string">
+  Bearer token for authentication. Required if `is_private` is `true`.
+</ParamField>
+
+## Response
+
+<ResponseField name="content" type="array">
+  Array containing the UML diagram data for the room's documents.
+</ResponseField>
+
+## Error Responses
+
+- `401` - Unauthorized user (missing token for private room).
+- `403` - Invalid token (user is not the room creator for private room).
+- `500` - Error extracting UML data.
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET \
+  https://api.planttogether.com/room/abc123/uml \
+  -H "Content-Type: application/json" \
+  -d '{
+    "is_private": false
+  }'
+```
+
+```bash cURL (Private Room)
+curl -X GET \
+  https://api.planttogether.com/room/abc123/uml \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-token-here" \
+  -d '{
+    "is_private": true
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.planttogether.com/room/abc123/uml',
+  {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      is_private: false,
+    }),
+  }
+);
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://api.planttogether.com/room/abc123/uml',
+    headers={'Content-Type': 'application/json'},
+    json={'is_private': False}
+)
+```
+
+</CodeGroup>
+
+## Example Response
+
+```json
+[
+  {
+    "documentId": "doc123",
+    "documentName": "my-document",
+    "umlData": "..."
+  }
+]
+```

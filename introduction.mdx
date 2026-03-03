@@ -1,0 +1,124 @@
+---
+title: Introduction
+description: A real-time collaborative PlantUML editor for creating diagrams together
+---
+
+<img
+  className="block dark:hidden"
+  src="https://github.com/user-attachments/assets/da3f8110-1472-4918-bdb8-4ff2a881cf8b"
+  alt="Plant Together Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="https://github.com/user-attachments/assets/da3f8110-1472-4918-bdb8-4ff2a881cf8b"
+  alt="Plant Together Hero Dark"
+/>
+
+## What is Plant Together?
+
+Plant Together is a collaborative PlantUML editor that enables teams to create UML diagrams in real-time. Whether you're designing sequence diagrams, use case diagrams, or any other PlantUML diagram type, Plant Together makes collaboration seamless and instantaneous.
+
+Built with modern web technologies, Plant Together runs entirely in your browser with support for offline editing and automatic sync when you reconnect.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card
+    title="Real-time Collaboration"
+    icon="users"
+    iconType="duotone"
+  >
+    Multiple users can edit the same diagram simultaneously using Yjs CRDT technology for conflict-free merging
+  </Card>
+  <Card
+    title="Live Diagram Preview"
+    icon="eye"
+    iconType="duotone"
+  >
+    See your PlantUML diagrams rendered in real-time as you type, with zoom and pan capabilities
+  </Card>
+  <Card
+    title="Public & Private Rooms"
+    icon="lock"
+    iconType="duotone"
+  >
+    Control who can access your diagrams with flexible access control for public and private rooms
+  </Card>
+  <Card
+    title="SVG Export"
+    icon="download"
+    iconType="duotone"
+  >
+    Export your completed diagrams as high-quality SVG files for use in documentation and presentations
+  </Card>
+  <Card
+    title="Offline Sync"
+    icon="wifi-slash"
+    iconType="duotone"
+  >
+    Continue editing when disconnected - your changes automatically sync when you reconnect
+  </Card>
+  <Card
+    title="Monaco Editor"
+    icon="code"
+    iconType="duotone"
+  >
+    Familiar VSCode-style editing experience with syntax highlighting and keyboard shortcuts
+  </Card>
+  <Card
+    title="Guest Access"
+    icon="user-check"
+    iconType="duotone"
+  >
+    Jump right in without creating an account, or sign up for persistent access to your rooms
+  </Card>
+  <Card
+    title="WebSocket Updates"
+    icon="bolt"
+    iconType="duotone"
+  >
+    Lightning-fast updates delivered via WebSocket connections for instant collaboration
+  </Card>
+</CardGroup>
+
+## How It Works
+
+Plant Together leverages cutting-edge web technologies to deliver a seamless collaborative experience:
+
+- **Yjs CRDT** - Conflict-Free Replicated Data Types ensure that multiple editors can work simultaneously without conflicts
+- **PlantUML Core** - Pure JavaScript implementation runs entirely in your browser using WebAssembly
+- **Monaco Editor** - The same editor that powers VSCode, with native Yjs bindings
+- **WebSocket Server** - Real-time communication with fallback to cross-tab communication
+
+<Note>
+  Plant Together was created to facilitate easier collaboration on PlantUML diagrams for coursework, allowing any number of people to work on the same diagram together.
+</Note>
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Software Design" icon="diagram-project">
+    Collaborate on sequence diagrams, class diagrams, and component diagrams during architecture planning sessions
+  </Accordion>
+  <Accordion title="Documentation" icon="book">
+    Create and maintain technical documentation with team members contributing diagrams in real-time
+  </Accordion>
+  <Accordion title="Education" icon="graduation-cap">
+    Students can work together on UML assignments and coursework, making group projects more efficient
+  </Accordion>
+  <Accordion title="Remote Teams" icon="laptop">
+    Distributed teams can brainstorm and design systems together, seeing changes as they happen
+  </Accordion>
+</AccordionGroup>
+
+## Getting Started
+
+Ready to create your first collaborative diagram? Check out the [Quickstart](/quickstart) guide to get up and running in minutes.
+
+<Card
+  title="Quickstart Guide"
+  icon="rocket"
+  href="/quickstart"
+>
+  Create your first collaborative PlantUML diagram in under 5 minutes
+</Card>

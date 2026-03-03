@@ -1,0 +1,679 @@
+---
+title: Private Rooms
+description: Control access to your rooms with private mode and signature-based sharing
+---
+
+## Overview
+
+Private rooms in Plant Together provide secure, controlled access to your diagrams. Only the room owner and explicitly invited participants can access private rooms, making them ideal for sensitive work, client projects, and team collaboration.
+
+## Private vs Public Rooms
+
+<Tabs>
+  <Tab title="Public Rooms">
+    **Characteristics:**
+    - Open to anyone with the room name
+    - URL: `https://planttogether.com/#/{roomName}`
+    - No access control
+    - Cannot have duplicate names globally
+    
+    **Best for:**
+    - Open source projects
+    - Public documentation
+    - Community collaboration
+    - Educational content
+    
+    <Info>
+      Public rooms are great for transparency but offer no privacy protection.
+    </Info>
+  </Tab>
+  
+  <Tab title="Private Rooms">
+    **Characteristics:**
+    - Access controlled by owner
+    - URL: `https://planttogether.com/#/private/{ownerId}/{roomName}`
+    - Signature-based invitation system
+    - Each user can have their own private room with the same name
+    
+    **Best for:**
+    - Internal team projects
+    - Client work
+    - Sensitive diagrams
+    - Controlled collaboration
+    
+    <Warning>
+      Private rooms require an authenticated account. Guest users have session-based private rooms that don't persist.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Creating Private Rooms
+
+<Steps>
+  <Step title="Toggle Privacy Setting">
+    On the landing page, enable the **Private** toggle switch before submitting your room name.
+    
+    ```typescript
+    // Source: landing.page.tsx:15
+    const [isPrivate, setIsPrivate] = useState(false)
+    ```
+
+  </Step>
+
+  <Step title="Submit Room Name">
+    Enter your room name and click **Submit**. The room will be created with private access control.
+    
+    ```typescript
+    // Source: landing.page.tsx:38-40
+    const roomToGoTo = isPrivate
+      ? `private/${userContext?.context?.userId}/${roomName}`
+      : roomName
+    ```
+    
+    <Tip>
+      Private rooms are namespaced by user ID, so you can create `my-project` even if another user has a public or private room named `my-project`.
+    </Tip>
+  </Step>
+
+  <Step title="Access Your Private Room">
+    You'll be redirected to your private room:
+    
+    ```plaintext
+    /#/private/user_abc123/project-diagrams
+              └─────┬────┘ └────────┬────────┘
+               Owner ID       Room Name
+    ```
+  </Step>
+</Steps>
+
+## Access Control System
+
+### How Private Access Works
+
+<Info>
+  Private rooms use a **participant list** stored in the database. Only users on this list can access the room.
+</Info>
+
+<Steps>
+  <Step title="Room Creation">
+    When you create a private room, you're automatically added as the owner and participant.
+    
+    ```typescript
+    // Source: room.service.ts:54-62
+    const ownerId = this.authService.getUserId(token!)
+    if (room.owner_id !== ownerId) {
+      return false
+    }
+    ```
+  </Step>
+
+  <Step title="Access Validation">
+    When someone tries to access the room, the server checks:
+    
+    ```typescript
+    // Source: room.service.ts:79-86
+    async validateUserPrivateAccess(token: string, roomId: string) {
+      try {
+        const userId = this.authService.getUserId(token)
+        return await this.roomParticipantRepo.userPrivateAccess(
+          roomId, 
+          userId
+        )
+      } catch (error: any) {
+        throw new Error('Failed to validate user access to room')
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Access Granted or Denied">
+    - ✅ **Granted**: User is owner or on participant list
+    - ❌ **Denied**: User receives "Room not found" error
+    
+    <Note>
+      The system intentionally shows "Room not found" instead of "Access denied" to prevent room name enumeration attacks.
+    </Note>
+  </Step>
+</Steps>
+
+## Sharing Private Rooms
+
+### Signature-Based Invitations
+
+Private rooms use cryptographically signed URLs to grant access:
+
+<Steps>
+  <Step title="Generate Share Link">
+    As the room owner, click the **Share Room** button in the navigation bar.
+    
+    ```typescript
+    // Source: navBar.component.tsx:49-61
+    const handleShare = async () => {
+      try {
+        const { signature } = await plantService.shareRoom(roomId)
+        const shareUrl = `${window.location.origin}/#/private/${ownerId}/${roomName}?signature=${signature}`
+
+        // Copy to clipboard
+        await navigator.clipboard.writeText(shareUrl)
+        alert('Share link copied to clipboard!')
+      } catch (error: any) {
+        console.error('Failed to share room:', error)
+      }
+    }
+    ```
+
+  </Step>
+
+  <Step title="Server Creates Signature">
+    The server signs the room ID using a secret key:
+    
+    ```typescript
+    // Source: room.service.ts:89-96
+    async createRoomSignature(roomId: string) {
+      try {
+        if (!roomId) throw new Error('Room not found or not accessible')
+        return this.signature.sign(roomId)
+      } catch (error: any) {
+        throw new Error('Failed to sign room url')
+      }
+    }
+    ```
+    
+    The signature is generated using the `signed` package:
+    
+    ```typescript
+    // Source: room.service.ts:6-27
+    import { Signature, SignatureOptions } from 'signed'
+    import { ROOM_SIGNATURE_SECRET } from '../config.js'
+
+    constructor(/* ... */) {
+      this.signature = signed({ secret: ROOM_SIGNATURE_SECRET! })
+    }
+    ```
+  </Step>
+
+  <Step title="Share URL Contains Signature">
+    The generated URL looks like:
+    
+    ```plaintext
+    https://planttogether.com/#/private/user123/design-docs?signature=eyJhbGc...
+    ```
+    
+    Components:
+    - `user123` - Owner's user ID
+    - `design-docs` - Room name
+    - `signature=eyJhbGc...` - Cryptographic signature
+  </Step>
+
+  <Step title="Recipient Opens Link">
+    When someone clicks the share link:
+    
+    ```typescript
+    // Source: collabRoom.page.tsx:22-23
+    const [searchParams] = useSearchParams()
+    const signature = searchParams.get('signature')
+    ```
+    
+    The signature is extracted from the URL query parameters.
+  </Step>
+
+  <Step title="Server Validates Signature">
+    The server verifies the signature and grants access:
+    
+    ```typescript
+    // Source: room.service.ts:99-113
+    async processRoomSignature(
+      token: string, 
+      roomId: string, 
+      signature: string
+    ) {
+      try {
+        if (!roomId) throw new Error('No room provided')
+
+        const userId = this.authService.getUserId(token)
+        const verifiedRoomId = this.signature.verify(signature)
+
+        if (verifiedRoomId !== roomId)
+          throw new Error("Signature doesn't match requested room")
+
+        // Add user to participant list
+        this.roomParticipantRepo.addUserAccess(verifiedRoomId, userId)
+      } catch (error: any) {
+        throw new Error('Failed to sign room url')
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Access Granted Permanently">
+    Once validated, the user is added to the participant list and can access the room anytime without needing the signature again.
+    
+    <Info>
+      Signatures are single-use for access granting, but the access itself is permanent until revoked by the owner.
+    </Info>
+  </Step>
+</Steps>
+
+### Security Properties
+
+<CardGroup cols={2}>
+  <Card title="Tamper-Proof" icon="shield-check">
+    Signatures are cryptographically signed. Any modification to the URL invalidates the signature.
+    
+    ```plaintext
+    ✅ Valid:
+    ?signature=abc123...
+    
+    ❌ Invalid (tampered):
+    ?signature=abc124...
+    ```
+  </Card>
+
+  <Card title="Server-Side Validation" icon="server">
+    All validation happens on the server. Clients cannot bypass access controls.
+    
+    ```typescript
+    // Cannot be forged client-side
+    const verifiedRoomId = this.signature.verify(signature)
+    ```
+  </Card>
+
+  <Card title="Secret Key Protection" icon="key">
+    Signatures are created using a server-side secret:
+    
+    ```typescript
+    // Source: room.service.ts:27
+    this.signature = signed({ 
+      secret: ROOM_SIGNATURE_SECRET! 
+    })
+    ```
+    
+    The secret never leaves the server.
+  </Card>
+
+  <Card title="Room-Specific" icon="fingerprint">
+    Each signature is tied to a specific room ID:
+    
+    ```typescript
+    if (verifiedRoomId !== roomId)
+      throw new Error("Signature doesn't match")
+    ```
+    
+    You can't reuse a signature for different rooms.
+  </Card>
+</CardGroup>
+
+## Toggling Room Privacy
+
+<Warning>
+  Only **room owners** who are **authenticated users** (not guests) can toggle room privacy.
+</Warning>
+
+### Switching from Public to Private
+
+<Steps>
+  <Step title="Click the Privacy Button">
+    In the navigation bar, click the **Public Room** button (green with unlocked icon).
+    
+    ```typescript
+    // Source: navBar.component.tsx:80-96
+    {!userContext.context.isGuest && isOwner && (
+      <Button
+        size={ButtonSize.sm}
+        onClick={handleAccessToggle}
+        disabled={isLoading}
+        className={`${isPrivate ? 'bg-blue-500' : 'bg-green-500'}`}
+      >
+        <FontAwesomeIcon
+          icon={isPrivate ? faLock : faLockOpen}
+        />
+        {isLoading
+          ? 'Changing...'
+          : isPrivate ? 'Private Room' : 'Public Room'
+        }
+      </Button>
+    )}
+    ```
+  </Step>
+
+  <Step title="Server Updates Access">
+    The server changes the room's privacy setting:
+    
+    ```typescript
+    // Source: plant.service.tsx:273-292
+    export const changeRoomAccess = async (
+      roomId: string, 
+      isPrivate: boolean
+    ) => {
+      const token = await retrieveToken()
+      const response = await fetch(
+        `${serverHttpUrl}/room/${roomId}/access`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token,
+          },
+          body: JSON.stringify({ is_private: isPrivate }),
+        }
+      )
+      if (!response.ok) throw new Error('Failed to change access')
+    }
+    ```
+    
+    ```typescript
+    // Backend - Source: room.service.ts:116-123
+    async changeRoomAccess(room_id: string, isPrivate: boolean) {
+      try {
+        await this.roomRepo.updateRoomAccess(room_id, isPrivate)
+      } catch (error) {
+        throw new Error('Error updating room access')
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="URL Changes">
+    You'll be redirected to the new URL:
+    
+    ```typescript
+    // Source: navBar.component.tsx:35-40
+    const navigateLink = !isPrivate
+      ? `/private/${userContext.context.userId}/${roomName}`
+      : `/${roomName}`
+    
+    await plantService.changeRoomAccess(roomId, !isPrivate)
+    navigate(navigateLink)
+    ```
+    
+    **Before (public):**
+    ```
+    /#/my-project
+    ```
+    
+    **After (private):**
+    ```
+    /#/private/user123/my-project
+    ```
+  </Step>
+</Steps>
+
+### Switching from Private to Public
+
+The same process works in reverse:
+
+1. Click the **Private Room** button (blue with locked icon)
+2. Room becomes publicly accessible
+3. URL changes from `/#/private/{userId}/{roomName}` to `/#/{roomName}`
+
+<Note>
+  When switching to public, the participant list is retained but not enforced. Anyone can now access the room by name.
+</Note>
+
+## Room Ownership and Permissions
+
+### Owner Capabilities
+
+<Tabs>
+  <Tab title="Full Control">
+    Room owners can:
+    
+    - ✅ Toggle room privacy
+    - ✅ Share invitation links
+    - ✅ Create, rename, and delete documents
+    - ✅ Edit all content
+    - ✅ Export diagrams
+    - ✅ Invite unlimited participants
+  </Tab>
+  
+  <Tab title="Cannot Transfer Ownership">
+    Currently, Plant Together does not support:
+    
+    - ❌ Transferring ownership to another user
+    - ❌ Multiple owners per room
+    - ❌ Removing participants (they have permanent access)
+    
+    <Tip>
+      If you need to revoke access, create a new private room and only share with trusted participants.
+    </Tip>
+  </Tab>
+</Tabs>
+
+### Participant Capabilities
+
+Invited participants can:
+
+- ✅ View and edit all documents in real-time
+- ✅ Create new documents
+- ✅ Rename and delete documents
+- ✅ Export diagrams
+- ❌ Change room privacy
+- ❌ Generate share links (owner only)
+
+<Info>
+  All participants have equal editing rights. Plant Together does not currently support read-only or limited-edit access.
+</Info>
+
+## Room Discovery and Access
+
+### Accessing Your Private Rooms
+
+<AccordionGroup>
+  <Accordion title="Via Direct URL">
+    If you know the room name, type it on the landing page with Private mode enabled:
+    
+    ```plaintext
+    Room name: my-project
+    Private: ✅ Enabled
+    ```
+    
+    You'll be taken to:
+    ```
+    /#/private/{your-user-id}/my-project
+    ```
+  </Accordion>
+
+  <Accordion title="Via Bookmarks">
+    Bookmark your frequently used private rooms:
+    
+    ```plaintext
+    📑 Bookmarks
+      └─ Work Project: /#/private/user123/work-arch
+      └─ Client Designs: /#/private/user123/client-designs
+      └─ Team Planning: /#/private/user123/sprint-diagrams
+    ```
+  </Accordion>
+
+  <Accordion title="Via Shared Links">
+    Use signature-based links shared by the owner:
+    
+    ```plaintext
+    /#/private/user456/shared-room?signature=eyJhbGc...
+    ```
+    
+    After first access, you can visit without the signature:
+    ```plaintext
+    /#/private/user456/shared-room
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Room Not Found Errors
+
+If you see "Room not found" when accessing a private room:
+
+<Steps>
+  <Step title="Verify the URL">
+    Check for typos in the room name or owner ID:
+    
+    ```plaintext
+    ❌ /#/private/user12/my-project  (wrong owner ID)
+    ✅ /#/private/user123/my-project
+    ```
+  </Step>
+
+  <Step title="Confirm Access">
+    You might not have been granted access:
+    
+    - Request a share link from the room owner
+    - Verify you're logged into the correct account
+  </Step>
+
+  <Step title="Check Room Existence">
+    The room may have been deleted or never created:
+    
+    - Contact the room owner
+    - Verify the link wasn't corrupted
+  </Step>
+</Steps>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Private for Sensitive Work" icon="lock">
+    Always use private rooms for:
+    
+    - Client projects
+    - Internal architecture
+    - Proprietary designs
+    - Security-sensitive diagrams
+  </Card>
+
+  <Card title="Share Links Securely" icon="shield">
+    Treat share links like passwords:
+    
+    - ✅ Send via secure channels (Slack DM, email)
+    - ❌ Don't post in public channels
+    - ❌ Don't share on social media
+    - ✅ Verify recipient identity
+  </Card>
+
+  <Card title="Organize Room Names" icon="folder">
+    Use clear naming conventions:
+    
+    ```plaintext
+    ✅ client-acme-api-design
+    ✅ internal-payment-flow
+    ✅ team-alpha-sprint-5
+    
+    ❌ room1
+    ❌ test
+    ❌ asdf
+    ```
+  </Card>
+
+  <Card title="Regular Access Audits" icon="clipboard-check">
+    Periodically review who has access:
+    
+    - Consider creating new rooms for sensitive projects
+    - Remove access by creating a new room (no revoke feature yet)
+    - Keep track of who you've shared links with
+  </Card>
+</CardGroup>
+
+## Limitations and Considerations
+
+<AccordionGroup>
+  <Accordion title="No Access Revocation">
+    **Current limitation**: Once someone has access, you cannot revoke it.
+    
+    **Workaround**:
+    1. Create a new private room
+    2. Copy content from old room
+    3. Share new room only with trusted participants
+    4. Abandon the old room
+  </Accordion>
+
+  <Accordion title="Guest User Private Rooms">
+    **Limitation**: Guest users' private rooms are session-based.
+    
+    **Impact**:
+    - Private rooms disappear when session ends
+    - Cannot share with signature links effectively
+    - Not recommended for persistent work
+    
+    **Solution**: Create a free account for persistent private rooms.
+  </Accordion>
+
+  <Accordion title="No Room Listing">
+    **Limitation**: Plant Together doesn't provide a "my rooms" page.
+    
+    **Impact**:
+    - You must remember or bookmark your room names
+    - No centralized view of all your rooms
+    
+    **Workaround**: Maintain a personal list or bookmarks.
+  </Accordion>
+
+  <Accordion title="Signature Links Don't Expire">
+    **Consideration**: Generated share links remain valid indefinitely.
+    
+    **Security note**:
+    - Links can be used by anyone who obtains them
+    - Consider creating new rooms if a link is compromised
+    - Share links only through secure, private channels
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Share Button Not Visible">
+    **Cause**: You're not viewing a private room or you're not the owner.
+    
+    **Solution**:
+    - Verify the URL starts with `/#/private/`
+    - Confirm you're logged in as the room owner
+    - Guest users cannot share private rooms
+  </Accordion>
+
+  <Accordion title="Cannot Toggle Privacy">
+    **Possible causes**:
+    - You're not the room owner
+    - You're logged in as a guest
+    - Room is being used by others
+    
+    **Solution**:
+    - Only the authenticated owner can toggle privacy
+    - Create a free account if you're a guest
+  </Accordion>
+
+  <Accordion title="Share Link Not Working">
+    **Possible causes**:
+    - Signature was truncated/modified
+    - Room was deleted
+    - Recipient is not logged in
+    
+    **Solutions**:
+    1. Ensure the full URL was copied (including `?signature=...`)
+    2. Verify the room still exists
+    3. Ask recipient to create an account and log in
+    4. Generate a new share link
+  </Accordion>
+
+  <Accordion title="Invalid Signature Error">
+    **Cause**: The signature doesn't match the room ID.
+    
+    **Solutions**:
+    - Regenerate the share link
+    - Verify no characters were dropped when copying
+    - Check for URL encoding issues
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Your First Room" icon="plus" href="/guides/creating-rooms">
+    Learn the full room creation process
+  </Card>
+  <Card title="Collaborate in Real-Time" icon="users" href="/guides/collaboration">
+    Understand how multiple users work together
+  </Card>
+  <Card title="Export Private Diagrams" icon="download" href="/guides/exporting-diagrams">
+    Download your secure diagrams
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/rooms/share">
+    Integrate room sharing into your workflows
+  </Card>
+</CardGroup>

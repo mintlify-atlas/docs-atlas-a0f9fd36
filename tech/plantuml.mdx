@@ -1,0 +1,217 @@
+---
+title: 'PlantUML in the Browser'
+description: 'How Plant Together runs Java-based PlantUML natively in the browser using CheerpJ'
+---
+
+## The Challenge
+
+PlantUML is a powerful diagramming tool written in Java. Traditionally, this means:
+
+- Cannot run directly in web browsers
+- Requires a server to render diagrams
+- Adds latency and server load
+- Complicates deployment and scaling
+
+Plant Together needed a way to render PlantUML diagrams in real-time without the overhead of server-side rendering.
+
+## The Solution: CheerpJ
+
+[CheerpJ](https://cheerpj.com/) is a compiler that converts Java bytecode into WebAssembly and JavaScript, enabling Java applications to run natively in the browser. This revolutionary approach allows PlantUML to run client-side with no server required.
+
+<Info>
+CheerpJ compiles Java bytecode (from .jar files) into WebAssembly and JavaScript, making it possible to run entire Java applications in modern web browsers.
+</Info>
+
+## plantuml-core
+
+Plant Together uses [plantuml-core](https://github.com/plantuml/plantuml-core), a pure JavaScript implementation of PlantUML powered by CheerpJ. This brings several major benefits:
+
+- **No server rendering** - All diagram generation happens in the user's browser
+- **Instant updates** - No network latency for diagram rendering
+- **Reduced costs** - No need for diagram rendering servers
+- **Better privacy** - Diagram content never leaves the user's browser
+- **Offline capable** - Works without an internet connection after initial load
+
+<Tip>
+Your PlantUML diagrams are rendered entirely on your device. The diagram content is never sent to a server for processing.
+</Tip>
+
+## Implementation Details
+
+### Initialization
+
+Before rendering diagrams, CheerpJ and PlantUML need to be initialized:
+
+```typescript
+const initialize = async (cheerpjPath = '/app/plantuml-wasm') => {
+  await Promise.all([
+    // Initialize CheerpJ runtime with preloaded resources
+    cheerpjInit({ preloadResources: _runtimeResources() }),
+    // Preload PlantUML JAR files
+    _preloadPlantumlFiles(cheerpjPath.replace('/app', '')),
+  ])
+
+  // Initialize the PlantUML runtime
+  await cheerpjRunMain(
+    'com.plantuml.api.cheerpj.v1.RunInit',
+    `${cheerpjPath}/plantuml-core.jar`,
+    `${cheerpjPath}/`,
+  )
+}
+```
+
+<Note>
+The initialization happens once when the application loads. After that, PlantUML is ready to render diagrams instantly.
+</Note>
+
+### SVG Rendering
+
+Plant Together uses SVG output for crisp, scalable diagrams:
+
+```typescript
+const renderSvg = async (pumlContent: string) => {
+  const svg = await cjCall(
+    'com.plantuml.api.cheerpj.v1.Svg',
+    'convert',
+    'light',
+    pumlContent,
+  )
+  return svg
+}
+```
+
+This calls the PlantUML Java API through CheerpJ's bridge, passing the PlantUML source code and receiving SVG markup.
+
+### PNG Rendering (Alternative)
+
+While Plant Together primarily uses SVG, PNG rendering is also supported:
+
+```typescript
+const renderPng = (pumlContent: string): Promise<Partial<IRenderPngResult>> => {
+  return new Promise<Partial<IRenderPngResult>>(resolve => {
+    const renderingStartedAt = new Date()
+    const resultFileSuffix = renderingStartedAt.getTime().toString()
+    
+    cjCall(
+      'com.plantuml.api.cheerpj.v1.Png',
+      'convertToBlob',
+      'light',
+      pumlContent,
+      `/files/result-${resultFileSuffix}.png`,
+    ).then((result: string) => {
+      const obj = JSON.parse(result)
+      if (obj?.status == 'ok') {
+        cjFileBlob(`result-${resultFileSuffix}.png`).then((blob: Blob) => {
+          // Clean up temporary file from IndexedDB
+          const transaction = cheerpjGetFSMountForPath('/files/')
+            .dbConnection.transaction('files', 'readwrite')
+          transaction
+            .objectStore('files')
+            .delete(`/result-${resultFileSuffix}.png`)
+          
+          console.log(
+            'Rendering finished in',
+            new Date().getTime() - renderingStartedAt.getTime(),
+            'ms',
+          )
+          
+          resolve({ blob })
+        })
+      }
+    })
+  })
+}
+```
+
+### Error Handling
+
+PlantUML syntax errors are captured and displayed to the user:
+
+```typescript
+if (obj?.status !== 'ok') {
+  const errorResponse = obj as IRenderPngErrorResponse
+  const errorResult: IPlantUmlError = {
+    duration: errorResponse.duration,
+    status: errorResponse.status,
+    line: errorResponse?.line,        // Which line has the error
+    message: (errorResponse?.error || errorResponse?.exception) ?? 'No error was found.',
+  }
+  resolve({ error: errorResult })
+}
+```
+
+When a syntax error occurs, Plant Together:
+1. Identifies the line number with the error
+2. Highlights it in the Monaco Editor
+3. Displays the error message to the user
+
+<Tip>
+Syntax errors are highlighted directly in the editor with a red wavy underline, making it easy to spot and fix issues.
+</Tip>
+
+## Runtime Resources
+
+CheerpJ requires various Java runtime resources to execute PlantUML. These are preloaded for optimal performance:
+
+```typescript
+const _runtimeResources = () => {
+  return [
+    '/lt/runtime/rt.jar.jdk.js',
+    '/lt/runtime/rt.jar.java.util.function.js',
+    '/lts/rt.jar',
+    '/lt/runtime/rt.jar.java.lang.js',
+    '/lt/runtime/rt.jar.java.awt.js',
+    // ... many more runtime files
+  ]
+}
+```
+
+These resources are cached by the browser, so subsequent page loads are much faster.
+
+## Credits and Inspiration
+
+Plant Together's implementation is heavily based on [plantuml.js](https://github.com/plantuml/plantuml.js) by [@sakirtemel](https://github.com/sakirtemel), with modifications to:
+
+- Work with React's component lifecycle
+- Support SVG output (original was PNG only)
+- Integrate with the collaborative editing workflow
+- Handle errors gracefully in the UI
+
+## Performance Characteristics
+
+- **Initial Load** - Takes a few seconds to initialize CheerpJ and load PlantUML (~5-10 seconds)
+- **Subsequent Renders** - Very fast, typically under 100ms for simple diagrams
+- **Complex Diagrams** - May take longer, but still faster than server round-trips
+- **Memory Usage** - Runs in a WebAssembly sandbox with controlled memory
+
+<Note>
+After the initial load, PlantUML rendering is nearly instantaneous for most diagrams.
+</Note>
+
+## Advantages Over Server Rendering
+
+| Aspect | Client-Side (CheerpJ) | Server-Side |
+|--------|----------------------|-------------|
+| **Latency** | Instant (no network) | 100-500ms network delay |
+| **Privacy** | Content stays local | Must send to server |
+| **Cost** | No server needed | Server resources required |
+| **Scalability** | Infinite (client CPUs) | Limited by server capacity |
+| **Offline** | Works offline | Requires connection |
+
+## Learn More
+
+- [CheerpJ Documentation](https://cheerpj.com/docs)
+- [plantuml-core on GitHub](https://github.com/plantuml/plantuml-core)
+- [plantuml.js by @sakirtemel](https://github.com/plantuml/plantuml.js)
+- [PlantUML Official Site](https://plantuml.com/)
+
+## Related Technologies
+
+<CardGroup cols={2}>
+  <Card title="Monaco Editor" icon="code" href="/tech/monaco-editor">
+    The editor used for PlantUML code
+  </Card>
+  <Card title="WebSockets" icon="network-wired" href="/tech/websockets">
+    Real-time sync for collaborative editing
+  </Card>
+</CardGroup>

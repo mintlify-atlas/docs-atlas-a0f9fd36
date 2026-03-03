@@ -1,0 +1,193 @@
+---
+title: 'Monaco Editor'
+description: 'The VS Code-powered editor that drives Plant Together'
+---
+
+## What is Monaco Editor?
+
+The [Monaco Editor](https://microsoft.github.io/monaco-editor/) is the code editor that powers VS Code, packaged for use in web applications. It provides a familiar, feature-rich editing experience with syntax highlighting, keyboard shortcuts, and extensive customization options.
+
+<Info>
+Monaco Editor is the same editor you use in Visual Studio Code, but running directly in the browser.
+</Info>
+
+## Why Monaco Editor?
+
+Plant Together chose Monaco Editor for several compelling reasons:
+
+1. **Familiarity** - Developers already know the VS Code interface and shortcuts
+2. **Native Yjs Binding** - First-class support for Yjs collaborative editing through `y-monaco`
+3. **Rich Features** - Built-in features like syntax highlighting, code folding, and multi-cursor support
+4. **Performance** - Optimized for handling large documents efficiently
+5. **Customization** - Extensive API for theming and configuration
+
+<Tip>
+All your favorite VS Code keyboard shortcuts work in Plant Together's editor, including Ctrl+D for multi-select and Ctrl+/ for comments.
+</Tip>
+
+## Integration in Plant Together
+
+### Basic Editor Setup
+
+Plant Together uses the React wrapper for Monaco Editor:
+
+```typescript
+import { Editor, Monaco } from '@monaco-editor/react'
+import { editor } from 'monaco-editor'
+
+<Editor
+  theme={'vs-dark'}
+  defaultLanguage={'python'}
+  onMount={handleEditorDidMount}
+  onChange={value => setEditorValue(value || '')}
+/>
+```
+
+### Yjs Binding
+
+The magic happens when we bind the Monaco Editor to a Yjs shared type:
+
+```typescript
+import { MonacoBinding } from 'y-monaco'
+import * as Y from 'yjs'
+import { WebsocketProvider } from 'y-websocket'
+
+// Create Yjs document and shared text type
+const doc = new Y.Doc()
+const provider = new WebsocketProvider(serverWsUrl, wsID, doc)
+const type = doc.getText('monaco')
+
+// Bind to Monaco Editor
+const binding = new MonacoBinding(
+  type,                              // Yjs shared text type
+  editorRef.current.getModel()!,     // Monaco editor model
+  new Set([editorRef.current]),      // Set of editors to bind
+  provider.awareness                 // Awareness for user presence
+)
+```
+
+<Note>
+The MonacoBinding automatically synchronizes changes between the editor and the Yjs document, handling all the complexity of collaborative editing.
+</Note>
+
+### Remote Cursor Display
+
+One of the powerful features is displaying where other users are editing:
+
+```typescript
+const updateClientStyleSheets = (statesArray: [number, { [x: string]: any }][]) => {
+  statesArray.forEach(state => {
+    const clientId = state[0]
+    if (state[1].user) {
+      const userColor = state[1].user.color
+      const username = state[1].user.name
+
+      const styleSheet = document.createElement('style')
+      styleSheet.innerText = `
+        .yRemoteSelectionHead-${clientId}{
+          border-left: 2px solid ${userColor};
+          position: relative;
+        }
+        .yRemoteSelection-${clientId}{
+          background-color: ${userColor} !important;
+          opacity: 0.5 !important;
+        }
+        .yRemoteSelectionHead-${clientId}::before {
+          content: '${username}';
+          background-color: ${userColor};
+          font-size: 10px;
+          position: absolute;
+          top: -18px;
+          left: -2px;
+        }
+      `
+      document.head.appendChild(styleSheet)
+    }
+  })
+}
+```
+
+This creates colored cursors and selections for each collaborator, with their username displayed on hover.
+
+### Error Highlighting
+
+Plant Together enhances the editing experience by highlighting PlantUML syntax errors directly in the editor:
+
+```typescript
+if (error && error.line) {
+  const monaco = monacoRef.current
+  decorations?.set([{
+    range: new monaco.Range(error.line, 1, error.line, 1),
+    options: {
+      isWholeLine: true,
+      inlineClassName: 'underline decoration-red-700 decoration-wavy',
+    },
+  }])
+}
+```
+
+<Tip>
+When PlantUML encounters a syntax error, the offending line is highlighted with a red wavy underline, just like in VS Code.
+</Tip>
+
+### Cross-Platform Line Ending Fix
+
+A subtle but important detail for collaboration across different operating systems:
+
+```typescript
+// Normalize line endings to LF (Unix-style)
+const newModel = editorRef.current.getModel()
+if (newModel === null) return
+
+// Set EOL to 0 (LF) instead of 1 (CRLF)
+netModel.setEOL(0)
+editorRef.current.setModel(newModel)
+```
+
+This ensures that users on Windows, macOS, and Linux can collaborate without issues caused by different line ending conventions.
+
+## Key Features Used
+
+### Dark Theme
+Plant Together uses the `vs-dark` theme for a comfortable editing experience:
+
+```typescript
+<Editor theme={'vs-dark'} />
+```
+
+### Language Support
+Configured with Python syntax highlighting (PlantUML syntax is similar):
+
+```typescript
+<Editor defaultLanguage={'python'} />
+```
+
+### Real-time Updates
+The `onChange` handler updates the PlantUML preview as you type:
+
+```typescript
+<Editor onChange={value => setEditorValue(value || '')} />
+```
+
+## Performance Considerations
+
+- **Lazy Loading** - Monaco Editor is loaded asynchronously to improve initial page load
+- **Model Reuse** - Editor models are reused when switching between documents
+- **Efficient Updates** - Only changed portions are re-rendered
+
+## Learn More
+
+- [Monaco Editor API](https://microsoft.github.io/monaco-editor/api/index.html)
+- [Monaco Editor Playground](https://microsoft.github.io/monaco-editor/playground.html)
+- [y-monaco Documentation](https://github.com/yjs/y-monaco)
+
+## Related Technologies
+
+<CardGroup cols={2}>
+  <Card title="Yjs" icon="share-nodes" href="/tech/yjs">
+    CRDT framework powering collaboration
+  </Card>
+  <Card title="PlantUML" icon="diagram-project" href="/tech/plantuml">
+    Diagram rendering in the browser
+  </Card>
+</CardGroup>

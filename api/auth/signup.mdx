@@ -1,0 +1,108 @@
+---
+title: "Sign Up"
+api: "POST /auth/signup"
+description: "Create a new user account with email and password"
+---
+
+## Request
+
+<ParamField body="displayName" type="string" required>
+  The display name for the new user account
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  The email address for the new user account
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The password for the new user account
+</ParamField>
+
+## Response
+
+<ResponseField name="token" type="string">
+  Authentication token for the newly created user
+</ResponseField>
+
+### Success Response
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### 400 Bad Request
+
+Returned when required fields are missing from the request body.
+
+```json
+{
+  "error": "Invalid request: Missing required fields"
+}
+```
+
+### 500 Internal Server Error
+
+Returned when an unexpected error occurs during account creation.
+
+```json
+{
+  "error": "An unexpected error occurred. Please try again later."
+}
+```
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.planttogether.com/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "displayName": "John Doe",
+    "email": "john@example.com",
+    "password": "securePassword123"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.planttogether.com/auth/signup', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    displayName: 'John Doe',
+    email: 'john@example.com',
+    password: 'securePassword123'
+  })
+});
+
+const data = await response.json();
+console.log(data.token);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.planttogether.com/auth/signup',
+    json={
+        'displayName': 'John Doe',
+        'email': 'john@example.com',
+        'password': 'securePassword123'
+    }
+)
+
+data = response.json()
+print(data['token'])
+```
+
+</CodeGroup>

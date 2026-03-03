@@ -1,0 +1,263 @@
+---
+title: 'Docker Compose Deployment'
+description: 'Deploy Plant Together using Docker Compose for development and production'
+---
+
+## Overview
+
+Plant Together uses Docker Compose to orchestrate multiple services including the React frontend, Express backend, Y-Redis WebSocket server, PostgreSQL database, Redis cache, and PgAdmin. This guide covers both development and production deployments.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- Docker (version 20.10 or higher)
+- Docker Compose (version 2.0 or higher)
+- Git
+
+## Quick Start
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Plant Together repository to your local machine:
+
+    ```bash
+    git clone https://github.com/yourusername/plant-together.git
+    cd plant-together
+    ```
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a `.env` file in the root directory. At minimum, you must configure Firebase credentials:
+
+    <Warning>
+      The following Firebase environment variables are **required**:
+      - `FIREBASE_API_KEY`
+      - `FIREBASE_AUTH_DOMAIN`
+      - `FIREBASE_PROJECT_ID`
+    </Warning>
+
+    See the [Environment Variables](/deployment/environment-variables) page for a complete list of configuration options.
+  </Step>
+
+  <Step title="Build and Start Services">
+    <CodeGroup>
+      ```bash Development
+      docker compose up --build
+      ```
+
+      ```bash Production
+      docker compose -f docker-compose-prod.yaml up --build -d
+      ```
+    </CodeGroup>
+
+    This command will:
+    - Build Docker images for all services
+    - Start all containers defined in the compose file
+    - Create necessary networks and volumes
+  </Step>
+
+  <Step title="Access the Application">
+    Once the containers are running, you can access:
+
+    - **React Application**: [http://localhost:5173](http://localhost:5173) (dev) or [http://localhost:4173](http://localhost:4173) (prod)
+    - **Express API**: [http://localhost:3000](http://localhost:3000)
+    - **Y-Redis WebSocket**: `ws://localhost:3003`
+    - **PgAdmin**: [http://localhost:1007](http://localhost:1007)
+  </Step>
+</Steps>
+
+## Service Architecture
+
+The Docker Compose configuration includes the following services:
+
+| Service | Container Name | Purpose | Default Port |
+|---------|---------------|---------|-------------|
+| `plant-together-react` | `plant-together-react-dev` | React frontend application | 5173 (dev), 4173 (prod) |
+| `plant-together-express` | `plant-together-express-dev` | Express REST API server | 3000 |
+| `plant-together-yredis` | `plant-together-yredis-dev` | Y-Redis WebSocket server for real-time collaboration | 3003 |
+| `redis-together` | `redis-together-dev` | Redis cache for WebSocket connections | 6379 |
+| `database-psql` | `database-psql-dev` | PostgreSQL database | 5432 |
+| `pgadmin-together` | `pgadmin-together-dev` | PgAdmin web interface | 1007 |
+
+## Development vs Production
+
+### Development Configuration
+
+The development setup (`docker-compose.yaml`) includes:
+
+- Hot reload for React and Express services
+- Volume mounts for live code updates
+- Debug-friendly logging
+- PgAdmin for database management
+
+```yaml
+volumes:
+  - type: bind
+    source: ./react
+    target: /app
+  - /app/node_modules
+  - /app/.vite
+```
+
+### Production Configuration
+
+The production setup (`docker-compose-prod.yaml`) includes:
+
+- Optimized production builds
+- Restart policies for high availability
+- Additional networks for service isolation
+- Analytics integration (PostHog, Clarity)
+
+```yaml
+restart: always
+networks:
+  - plant-together-network
+  - yredis-network
+```
+
+## Common Operations
+
+### View Service Logs
+
+<CodeGroup>
+  ```bash All Services
+  docker compose logs -f
+  ```
+
+  ```bash Specific Service
+  docker compose logs -f plant-together-express-dev
+  ```
+
+  ```bash Last 100 Lines
+  docker compose logs --tail=100 plant-together-yredis-dev
+  ```
+</CodeGroup>
+
+### Stop Services
+
+<CodeGroup>
+  ```bash Stop (Preserves Data)
+  docker compose stop
+  ```
+
+  ```bash Stop and Remove Containers
+  docker compose down
+  ```
+
+  ```bash Stop and Remove Volumes
+  docker compose down -v
+  ```
+</CodeGroup>
+
+### Restart a Service
+
+```bash
+# Restart a specific service
+docker compose restart plant-together-express-dev
+
+# Rebuild and restart a service
+docker compose up --build -d plant-together-express-dev
+```
+
+### Access Container Shell
+
+```bash
+# Access Express container
+docker exec -it plant-together-express-dev sh
+
+# Access PostgreSQL container
+docker exec -it database-psql-dev psql -U postgres
+```
+
+## Networking
+
+### Development Network
+
+All services communicate over the `plant-together-network` Docker network:
+
+```yaml
+networks:
+  plant-together-network:
+```
+
+### Production Networks
+
+Production uses two isolated networks:
+
+- **plant-together-network**: For frontend and database connections
+- **yredis-network**: For Y-Redis and Redis communication
+
+## Persistent Storage
+
+Two Docker volumes are created for data persistence:
+
+<CodeGroup>
+  ```yaml PostgreSQL Data
+  volumes:
+    pgdata-plant-together-dev:
+      name: pgdata-plant-together-dev
+      driver: local
+  ```
+
+  ```yaml PgAdmin Data
+  volumes:
+    pgadmin-together-dev:
+      name: pgadmin-together-dev
+      driver: local
+  ```
+</CodeGroup>
+
+<Warning>
+  Removing these volumes with `docker compose down -v` will **permanently delete** all database data and PgAdmin configurations.
+</Warning>
+
+## Troubleshooting
+
+### Port Already in Use
+
+If you encounter port conflicts, modify the port mappings in your `.env` file:
+
+```env
+PORT=3001              # Express server
+YREDIS_PORT=3004       # Y-Redis server
+PSQL_PORT=5433         # PostgreSQL
+REDIS_PORT=6380        # Redis
+PGADMIN_PORT=1008      # PgAdmin
+```
+
+### Container Fails to Start
+
+Check the logs for the specific service:
+
+```bash
+docker compose logs plant-together-express-dev
+```
+
+Common issues:
+- Missing environment variables (especially Firebase credentials)
+- Database connection failures (check `DB_HOST`, `DB_USER`, `DB_PASS`)
+- Port conflicts
+
+### Database Connection Issues
+
+Verify PostgreSQL is healthy:
+
+```bash
+docker compose ps
+docker exec -it database-psql-dev pg_isready
+```
+
+### Redis Connection Issues
+
+Test Redis connectivity:
+
+```bash
+docker exec -it redis-together-dev redis-cli ping
+```
+
+## Next Steps
+
+- Configure [Environment Variables](/deployment/environment-variables) for your environment
+- Review the [System Architecture](/deployment/architecture) to understand component interactions
+- Set up monitoring and logging for production deployments
