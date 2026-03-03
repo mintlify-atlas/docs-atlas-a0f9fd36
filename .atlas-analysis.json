@@ -1,0 +1,113 @@
+{
+  "projectType": "saas",
+  "projectName": "Plant Together",
+  "projectDescription": "A real-time collaborative PlantUML editor for creating diagrams together",
+  "theme": "palm",
+  "primaryColor": "#22c55e",
+  "lightColor": "#86efac",
+  "darkColor": "#16a34a",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/creating-rooms",
+              "guides/collaboration",
+              "guides/exporting-diagrams",
+              "guides/private-rooms"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker-compose",
+              "deployment/environment-variables",
+              "deployment/architecture"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/signup",
+              "api/auth/login",
+              "api/auth/guest",
+              "api/auth/verify"
+            ]
+          },
+          {
+            "group": "Rooms",
+            "pages": [
+              "api/rooms/create",
+              "api/rooms/get-public",
+              "api/rooms/get-private",
+              "api/rooms/change-access",
+              "api/rooms/share"
+            ]
+          },
+          {
+            "group": "Documents",
+            "pages": [
+              "api/documents/create",
+              "api/documents/rename",
+              "api/documents/get-uml"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technology",
+        "groups": [
+          {
+            "group": "Core Technologies",
+            "pages": [
+              "tech/yjs",
+              "tech/monaco-editor",
+              "tech/plantuml",
+              "tech/websockets"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time collaborative editing with Yjs CRDT",
+    "Live PlantUML diagram preview",
+    "Public and private rooms with access control",
+    "SVG diagram export",
+    "Offline sync with cross-tab communication",
+    "Guest and authenticated user support",
+    "Monaco code editor integration",
+    "WebSocket-based real-time updates"
+  ],
+  "publicApiSurface": [
+    "POST /auth/signup",
+    "POST /auth/login",
+    "GET /auth/guest",
+    "GET /auth/verify",
+    "POST /room/:room_name",
+    "GET /room/public/:room_name",
+    "GET /room/private/:owner_id/:room_name",
+    "PUT /room/:room_id/access",
+    "PUT /room/share/:room_id",
+    "GET /room/:room_id/uml",
+    "POST /room/:room_id/document/:document_name",
+    "PUT /room/:room_id/document/:document_id/rename",
+    "GET /user/displayname"
+  ]
+}
