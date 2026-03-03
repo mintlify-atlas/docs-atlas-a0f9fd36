@@ -78,6 +78,12 @@
               "api/documents/rename",
               "api/documents/get-uml"
             ]
+          },
+          {
+            "group": "User",
+            "pages": [
+              "api/user/get-displayname"
+            ]
           }
         ]
       },

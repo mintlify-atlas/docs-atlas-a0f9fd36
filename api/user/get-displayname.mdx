@@ -1,0 +1,100 @@
+---
+title: Get User Display Name
+api: GET /user/displayname
+description: Retrieve the display name for the authenticated user
+---
+
+## Authentication
+
+This endpoint requires authentication via the `Authorization` header with a valid JWT token.
+
+## Headers
+
+<ParamField header="Authorization" type="string" required>
+  JWT token obtained from login, signup, or guest authentication
+</ParamField>
+
+## Response
+
+<ResponseField name="displayName" type="string">
+  The display name of the authenticated user
+</ResponseField>
+
+### Success Response
+
+Returns the user's display name on success.
+
+```json
+{
+  "displayName": "John Doe"
+}
+```
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### 400 Bad Request
+
+No token was provided in the request.
+
+```json
+{
+  "error": "No Token Provided"
+}
+```
+
+### 500 Internal Server Error
+
+An unexpected error occurred while retrieving the display name.
+
+```json
+{
+  "error": "Internal server error"
+}
+```
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X GET https://api.plant-together.com/user/displayname \
+  -H "Authorization: YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.plant-together.com/user/displayname', {
+  method: 'GET',
+  headers: {
+    'Authorization': token
+  }
+});
+
+const data = await response.json();
+console.log(data.displayName);
+```
+
+```python Python
+import requests
+
+headers = {
+    'Authorization': token
+}
+
+response = requests.get(
+    'https://api.plant-together.com/user/displayname',
+    headers=headers
+)
+
+data = response.json()
+print(data['displayName'])
+```
+
+</CodeGroup>
+
+## Source Reference
+
+Implementation: `express/src/index.ts:282-291`
